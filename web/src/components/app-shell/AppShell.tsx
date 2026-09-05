@@ -39,18 +39,18 @@ export function AppShell() {
   }
 
   return (
-    <main className="relative flex h-dvh w-full overflow-hidden bg-reiterate-bg p-[clamp(.5rem,1vw,.9rem)] text-reiterate-text">
+    <main className="relative flex h-dvh w-full overflow-hidden bg-reiterate-bg text-reiterate-text lg:p-[clamp(.5rem,1vw,.9rem)]">
       <div className="pointer-events-none absolute -left-[12vw] top-[18vh] size-[32vw] max-h-[34rem] max-w-[34rem] rounded-full bg-reiterate-orange/6 blur-[110px]" />
       <div className="pointer-events-none absolute right-[-10vw] top-[-12vh] size-[38vw] max-h-[42rem] max-w-[42rem] rounded-full bg-reiterate-red/5 blur-[120px]" />
       <div className="pointer-events-none absolute bottom-[-18vw] left-[42%] size-[34vw] max-h-[34rem] max-w-[34rem] rounded-full bg-reiterate-amber/4 blur-[110px]" />
 
-      <div className={`relative z-10 flex min-h-0 min-w-0 flex-1 overflow-hidden rounded-[clamp(1.25rem,1.8vw,1.75rem)] border border-white/[0.07] bg-reiterate-bg/90 shadow-[0_1rem_4rem_rgba(0,0,0,.22),inset_0_1px_rgba(255,255,255,.035)] backdrop-blur-xl lg:gap-[clamp(.65rem,1vw,1rem)] lg:overflow-visible ${sidebarOpen ? "lg:border-0 lg:bg-transparent lg:shadow-none lg:backdrop-blur-none" : ""}`}>
+      <div className={`relative z-10 flex min-h-0 min-w-0 flex-1 overflow-hidden bg-reiterate-bg/90 backdrop-blur-xl lg:rounded-[clamp(1.25rem,1.8vw,1.75rem)] lg:border lg:border-white/[0.07] lg:shadow-[0_1rem_4rem_rgba(0,0,0,.22),inset_0_1px_rgba(255,255,255,.035)] lg:backdrop-blur-xl lg:gap-[clamp(.65rem,1vw,1rem)] lg:overflow-visible ${sidebarOpen ? "lg:border-0 lg:bg-transparent lg:shadow-none lg:backdrop-blur-none" : ""}`}>
         <div className={`relative z-40 hidden shrink-0 transition-[width] duration-200 lg:flex ${sidebarOpen ? "w-[clamp(15rem,18vw,18rem)]" : "w-16"}`}>
           <Sidebar sessions={sessions} hasMessages={messages.length > 0} onNewSession={handleNewSession} isOpen={sidebarOpen} onToggle={() => setSidebarOpen((current) => !current)} />
         </div>
 
         {!mobileSidebarOpen && (
-          <div className="relative z-20 flex w-14 shrink-0 border-r border-white/[0.07] sm:w-16 lg:hidden">
+          <div className="relative z-20 flex w-16 shrink-0 border-r border-white/[0.08] lg:hidden">
             <Sidebar sessions={sessions} hasMessages={messages.length > 0} onNewSession={handleNewSession} isOpen={false} onToggle={() => setMobileSidebarOpen(true)} />
           </div>
         )}

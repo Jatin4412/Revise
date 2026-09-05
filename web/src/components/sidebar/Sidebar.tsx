@@ -14,20 +14,45 @@ function ChevronIcon({ direction }: { direction: "left" | "right" }) {
   );
 }
 
+function PlusIcon() {
+  return (
+    <svg aria-hidden="true" className="size-4" fill="none" viewBox="0 0 24 24">
+      <path d="M12 5v14M5 12h14" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
+    </svg>
+  );
+}
+
 export function Sidebar({ sessions, hasMessages, onNewSession, isOpen, onToggle }: SidebarProps) {
   if (!isOpen) {
     return (
-      <aside className="flex h-full w-12 flex-col items-center rounded-[clamp(1rem,1.6vw,1.4rem)] border border-white/[0.07] bg-reiterate-deep/80 py-3 shadow-[0_1.5rem_4rem_rgba(0,0,0,.18)] backdrop-blur-2xl">
-        <span className="grid size-8 place-items-center rounded-[0.8rem] border border-reiterate-orange/20 bg-gradient-to-br from-reiterate-orange/20 to-reiterate-red/8 text-sm font-bold" aria-hidden="true">R</span>
-        <button
-          className="mt-auto grid size-8 place-items-center rounded-xl border border-white/[0.06] text-reiterate-dim transition hover:border-reiterate-orange/20 hover:bg-white/[0.035] hover:text-reiterate-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-reiterate-orange/40"
-          type="button"
-          onClick={onToggle}
-          aria-label="Open sidebar"
-          title="Open sidebar"
-        >
-          <ChevronIcon direction="right" />
-        </button>
+      <aside className="flex h-full w-12 flex-col items-center rounded-[clamp(1rem,1.6vw,1.4rem)] border border-white/[0.07] bg-reiterate-deep/90 py-2.5 shadow-[0_1.5rem_4rem_rgba(0,0,0,.2)] backdrop-blur-2xl">
+        <div className="flex w-full flex-col items-center gap-2 px-1.5">
+          <span className="grid size-8 place-items-center rounded-[0.8rem] border border-reiterate-orange/20 bg-gradient-to-br from-reiterate-orange/20 to-reiterate-red/8 text-sm font-bold shadow-[inset_0_1px_rgba(255,255,255,.04)]" aria-hidden="true">R</span>
+          <span className="h-px w-5 bg-white/[0.07]" aria-hidden="true" />
+          <button
+            className="group grid size-8 place-items-center rounded-xl border border-white/[0.06] text-reiterate-dim transition duration-200 hover:-translate-y-px hover:border-reiterate-orange/20 hover:bg-reiterate-orange/[0.05] hover:text-reiterate-orange focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-reiterate-orange/40"
+            type="button"
+            onClick={onNewSession}
+            aria-label="New session"
+            title="New session"
+          >
+            <PlusIcon />
+          </button>
+        </div>
+
+        <div className="mt-auto flex w-full flex-col items-center gap-2 px-1.5">
+          <span className="size-1.5 rounded-full bg-reiterate-orange shadow-[0_0_10px_rgba(251,146,60,.55)]" aria-label="System ready" title="System ready" />
+          <span className="h-px w-5 bg-white/[0.07]" aria-hidden="true" />
+          <button
+            className="grid size-8 place-items-center rounded-xl border border-white/[0.06] bg-white/[0.015] text-reiterate-dim transition duration-200 hover:border-reiterate-orange/20 hover:bg-white/[0.035] hover:text-reiterate-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-reiterate-orange/40"
+            type="button"
+            onClick={onToggle}
+            aria-label="Open sidebar"
+            title="Open sidebar"
+          >
+            <ChevronIcon direction="right" />
+          </button>
+        </div>
       </aside>
     );
   }

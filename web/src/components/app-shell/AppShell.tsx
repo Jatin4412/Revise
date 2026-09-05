@@ -50,7 +50,7 @@ export function AppShell() {
         </div>
 
         {!mobileSidebarOpen && (
-          <div className="relative z-20 flex w-14 shrink-0 sm:w-16 lg:hidden">
+          <div className="relative z-20 flex w-14 shrink-0 border-r border-white/[0.07] sm:w-16 lg:hidden">
             <Sidebar sessions={sessions} hasMessages={messages.length > 0} onNewSession={handleNewSession} isOpen={false} onToggle={() => setMobileSidebarOpen(true)} />
           </div>
         )}

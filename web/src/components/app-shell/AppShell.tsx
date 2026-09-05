@@ -8,11 +8,6 @@ import { Sidebar } from "@/components/sidebar/Sidebar";
 import { WorkspaceHeader } from "@/components/workspace/WorkspaceHeader";
 
 const sessions = ["New conversation", "Understanding Reiterate", "Project planning"];
-const starters = [
-  "Help me think through an idea",
-  "Challenge my current reasoning",
-  "Turn these rough notes into a plan",
-];
 
 export function AppShell() {
   const [input, setInput] = useState("");
@@ -55,7 +50,7 @@ export function AppShell() {
         </div>
 
         {!mobileSidebarOpen && (
-          <div className="relative z-20 flex w-16 shrink-0 lg:hidden">
+          <div className="relative z-20 flex w-14 shrink-0 sm:w-16 lg:hidden">
             <Sidebar sessions={sessions} hasMessages={messages.length > 0} onNewSession={handleNewSession} isOpen={false} onToggle={() => setMobileSidebarOpen(true)} />
           </div>
         )}
@@ -69,9 +64,9 @@ export function AppShell() {
           </>
         )}
 
-        <section className={`relative z-10 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-reiterate-bg/80 lg:bg-transparent ${sidebarOpen ? "rounded-[clamp(1.15rem,1.6vw,1.5rem)] border border-white/[0.07] shadow-[0_1rem_4rem_rgba(0,0,0,.16),inset_0_1px_rgba(255,255,255,.035)] lg:rounded-[clamp(1.25rem,1.8vw,1.75rem)]" : "rounded-r-[clamp(1.25rem,1.8vw,1.75rem)] border-l border-white/[0.07]"}`} aria-label="Conversation workspace">
+        <section className={`relative z-10 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-reiterate-bg/80 lg:bg-transparent ${sidebarOpen ? "rounded-r-[clamp(1.25rem,1.8vw,1.75rem)] border-y border-r border-white/[0.07] shadow-[0_1rem_4rem_rgba(0,0,0,.16),inset_0_1px_rgba(255,255,255,.035)] lg:rounded-[clamp(1.25rem,1.8vw,1.75rem)] lg:border" : "rounded-r-[clamp(1.25rem,1.8vw,1.75rem)] border-y border-r border-white/[0.07]"}`} aria-label="Conversation workspace">
           <WorkspaceHeader onMenu={() => setMobileSidebarOpen(true)} />
-          <Conversation messages={messages} starters={starters} onStarterSelect={setInput} />
+          <Conversation messages={messages} />
           <Composer value={input} onChange={setInput} onSubmit={handleSubmit} />
         </section>
       </div>

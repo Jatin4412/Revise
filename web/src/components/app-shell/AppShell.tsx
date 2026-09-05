@@ -44,26 +44,46 @@ export function AppShell() {
   }
 
   return (
-    <main className="relative flex h-dvh w-full gap-[clamp(.5rem,1vw,.9rem)] overflow-hidden bg-reiterate-bg p-[clamp(.5rem,1vw,.9rem)] text-reiterate-text">
-      <div className="pointer-events-none absolute -left-[12vw] top-[18vh] size-[32vw] max-h-[34rem] max-w-[34rem] rounded-full bg-reiterate-orange/8 blur-[110px]" />
-      <div className="pointer-events-none absolute right-[-10vw] top-[-12vh] size-[38vw] max-h-[42rem] max-w-[42rem] rounded-full bg-reiterate-red/7 blur-[120px]" />
-      <div className="pointer-events-none absolute bottom-[-18vw] left-[42%] size-[34vw] max-h-[34rem] max-w-[34rem] rounded-full bg-reiterate-amber/5 blur-[110px]" />
+    <main className="relative h-dvh w-full overflow-hidden bg-reiterate-bg p-[clamp(.5rem,1vw,.9rem)] text-reiterate-text">
+      <div className="pointer-events-none absolute -left-[12vw] top-[18vh] size-[32vw] max-h-[34rem] max-w-[34rem] rounded-full bg-reiterate-orange/6 blur-[110px]" />
+      <div className="pointer-events-none absolute right-[-10vw] top-[-12vh] size-[38vw] max-h-[42rem] max-w-[42rem] rounded-full bg-reiterate-red/5 blur-[120px]" />
 
-      <div className={`relative z-20 hidden h-full shrink-0 transition-[width] duration-200 lg:block ${sidebarOpen ? "w-[clamp(15rem,18vw,18rem)]" : "w-16"}`}>
-        <Sidebar sessions={sessions} hasMessages={messages.length > 0} onNewSession={handleNewSession} isOpen={sidebarOpen} onToggle={() => setSidebarOpen((current) => !current)} />
+      <div className="relative flex h-full min-h-0 min-w-0 overflow-hidden rounded-[clamp(1.25rem,1.8vw,1.75rem)] border border-white/[0.07] bg-reiterate-bg/90 shadow-[0_1rem_4rem_rgba(0,0,0,.22),inset_0_1px_rgba(255,255,255,.035)] backdrop-blur-xl">
+        <div className={`relative z-20 hidden h-full shrink-0 border-r border-white/[0.07] transition-[width] duration-200 lg:block ${sidebarOpen ? "w-[clamp(15rem,18vw,18rem)]" : "w-14"}`}>
+          <Sidebar
+            sessions={sessions}
+            hasMessages={messages.length > 0}
+            onNewSession={handleNewSession}
+            isOpen={sidebarOpen}
+            onToggle={() => setSidebarOpen((current) => !current)}
+          />
+        </div>
+
+        <section className="relative z-10 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden" aria-label="Conversation workspace">
+          <WorkspaceHeader />
+          <Conversation messages={messages} starters={starters} onStarterSelect={setInput} />
+          <Composer value={input} onChange={setInput} onSubmit={handleSubmit} />
+        </section>
+
+        <div className={`absolute inset-y-0 left-0 z-40 w-14 lg:hidden ${mobileSidebarOpen ? "w-[min(18rem,86vw)]" : "w-14"}`}>
+          <Sidebar
+            sessions={sessions}
+            hasMessages={messages.length > 0}
+            onNewSession={handleNewSession}
+            isOpen={mobileSidebarOpen}
+            onToggle={() => setMobileSidebarOpen((current) => !current)}
+          />
+        </div>
+
+        {mobileSidebarOpen && (
+          <button
+            className="absolute inset-0 z-30 bg-black/45 backdrop-blur-[1px] lg:hidden"
+            type="button"
+            onClick={() => setMobileSidebarOpen(false)}
+            aria-label="Close sidebar"
+          />
+        )}
       </div>
-
-      <div className="absolute inset-y-[clamp(.5rem,1vw,.9rem)] left-[clamp(.5rem,1vw,.9rem)] z-40 w-16 lg:hidden">
-        <Sidebar sessions={sessions} hasMessages={messages.length > 0} onNewSession={handleNewSession} isOpen={mobileSidebarOpen} onToggle={() => setMobileSidebarOpen((current) => !current)} />
-      </div>
-
-      {mobileSidebarOpen && <button className="fixed inset-0 z-30 bg-black/50 backdrop-blur-[1px] lg:hidden" type="button" onClick={() => setMobileSidebarOpen(false)} aria-label="Close sidebar" />}
-
-      <section className="relative z-10 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[clamp(1.25rem,1.8vw,1.75rem)] border border-white/7 bg-reiterate-bg/85 shadow-[0_1rem_4rem_rgba(0,0,0,.2),inset_0_1px_rgba(255,255,255,.035)] backdrop-blur-xl" aria-label="Conversation workspace">
-        <WorkspaceHeader />
-        <Conversation messages={messages} starters={starters} onStarterSelect={setInput} />
-        <Composer value={input} onChange={setInput} onSubmit={handleSubmit} />
-      </section>
     </main>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 
 import { Composer } from "@/components/composer/Composer";
 import { Conversation, type Message } from "@/components/conversation/Conversation";
@@ -17,8 +17,9 @@ const starters = [
 export function AppShell() {
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
-  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const content = input.trim();
     if (!content) return;
@@ -38,8 +39,29 @@ export function AppShell() {
       <div className="pointer-events-none absolute right-[-10vw] top-[-12vh] size-[38vw] max-h-[42rem] max-w-[42rem] rounded-full bg-reiterate-red/7 blur-[120px]" />
       <div className="pointer-events-none absolute bottom-[-18vw] left-[42%] size-[34vw] max-h-[34rem] max-w-[34rem] rounded-full bg-reiterate-amber/5 blur-[110px]" />
 
-      <div className="relative z-10 hidden h-full lg:flex">
-        <Sidebar sessions={sessions} hasMessages={messages.length > 0} onNewSession={handleNewSession} />
+      {sidebarOpen && (
+        <button
+          className="fixed inset-0 z-30 bg-black/45 backdrop-blur-[1px] lg:hidden"
+          type="button"
+          onClick={() => setSidebarOpen(false)}
+          aria-label="Close sidebar"
+        />
+      )}
+
+      <div
+        className={
+          sidebarOpen
+            ? "absolute inset-y-[clamp(.5rem,1vw,.9rem)] left-[clamp(.5rem,1vw,.9rem)] z-40 w-[min(18rem,calc(100vw - 1rem))] lg:relative lg:inset-auto lg:z-10 lg:flex lg:h-full lg:w-auto"
+            : "absolute inset-y-[clamp(.5rem,1vw,.9rem)] left-[clamp(.5rem,1vw,.9rem)] z-40 w-12 lg:relative lg:inset-auto lg:z-10 lg:flex lg:h-full lg:w-12 lg:shrink-0"
+        }
+      >
+        <Sidebar
+          sessions={sessions}
+          hasMessages={messages.length > 0}
+          onNewSession={handleNewSession}
+          isOpen={sidebarOpen}
+          onToggle={() => setSidebarOpen((current) => !current)}
+        />
       </div>
 
       <section className="relative z-10 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[clamp(1.25rem,1.8vw,1.75rem)] border border-white/7 bg-reiterate-bg/85 shadow-[0_1rem_4rem_rgba(0,0,0,.2),inset_0_1px_rgba(255,255,255,.035)] backdrop-blur-xl" aria-label="Conversation workspace">

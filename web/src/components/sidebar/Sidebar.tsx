@@ -7,13 +7,7 @@ type SidebarProps = {
 };
 
 function Icon({ name, className = "size-5" }: { name: "chevron-left" | "chevron-right" | "edit" | "grid" | "settings"; className?: string }) {
-  const paths = {
-    "chevron-left": "m14.5 6-6 6 6 6",
-    "chevron-right": "m9.5 6 6 6-6 6",
-    edit: "M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z",
-    grid: "M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z",
-    settings: "M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7",
-  } as const;
+  const paths = { "chevron-left": "m14.5 6-6 6 6 6", "chevron-right": "m9.5 6 6 6-6 6", edit: "M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z", grid: "M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z", settings: "M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7" } as const;
   return <svg aria-hidden="true" className={className} fill="none" viewBox="0 0 24 24"><path d={paths[name]} stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.7" /></svg>;
 }
 
@@ -31,7 +25,7 @@ export function Sidebar({ sessions, hasMessages, onNewSession, isOpen, onToggle 
   }
 
   return (
-    <aside className="flex h-full min-h-0 w-full flex-col rounded-[1.15rem] border border-white/[0.08] bg-reiterate-deep/98 p-[clamp(1rem,1.5vw,1.5rem)] shadow-[0_1.5rem_4rem_rgba(0,0,0,.28)] backdrop-blur-2xl lg:rounded-none lg:border-0 lg:bg-transparent lg:shadow-none lg:backdrop-blur-none">
+    <aside className="flex h-full min-h-0 w-full flex-col rounded-[1.15rem] border border-white/[0.08] bg-reiterate-deep/98 p-[clamp(1rem,1.5vw,1.5rem)] shadow-[0_1.5rem_4rem_rgba(0,0,0,.28)] backdrop-blur-2xl lg:rounded-[1.25rem] lg:border-white/[0.07] lg:bg-reiterate-deep/95 lg:shadow-[0_1rem_3rem_rgba(0,0,0,.18)]">
       <div className="mb-[clamp(1.25rem,3vh,2.25rem)] flex items-center justify-between gap-3 px-1"><div className="flex min-w-0 items-center gap-3"><span className="grid size-9 shrink-0 place-items-center rounded-[0.8rem] border border-reiterate-orange/20 bg-gradient-to-br from-reiterate-orange/15 to-reiterate-red/5 text-sm font-bold">R</span><div className="min-w-0"><span className="block text-[0.58rem] font-semibold uppercase tracking-[0.22em] text-reiterate-muted/50">Workspace</span><span className="mt-0.5 block truncate text-[1.05rem] font-bold tracking-[-0.03em]">Reiterate</span></div></div><button className="grid size-9 shrink-0 place-items-center rounded-xl border border-white/[0.06] text-reiterate-dim transition hover:border-reiterate-orange/20 hover:bg-white/[0.035] hover:text-reiterate-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-reiterate-orange/40" type="button" onClick={onToggle} aria-label="Minimize sidebar" title="Minimize sidebar"><Icon name="chevron-left" className="size-4" /></button></div>
       <button className="group flex w-full items-center gap-3 rounded-[1rem] border border-reiterate-orange/15 bg-gradient-to-br from-reiterate-orange/10 to-reiterate-red/4 px-3.5 py-3 text-left text-sm font-semibold transition hover:-translate-y-px hover:border-reiterate-orange/25 hover:bg-reiterate-orange/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-reiterate-orange/40" type="button" onClick={onNewSession}><span className="grid size-8 place-items-center rounded-[0.7rem] bg-reiterate-orange/10 text-lg text-reiterate-orange">+</span><span>New session</span></button>
       <nav className="mt-[clamp(1.25rem,4vh,2.5rem)]" aria-label="Sessions"><div className="mb-2 flex items-center justify-between px-2 text-[0.58rem] font-bold uppercase tracking-[0.2em] text-reiterate-dim"><span>Recent sessions</span><span>{sessions.length.toString().padStart(2, "0")}</span></div><div className="space-y-0.5">{sessions.map((session, index) => <button className="group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[0.8rem] text-reiterate-muted transition hover:bg-white/[0.035] hover:text-reiterate-text focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-reiterate-orange/40" type="button" key={session}><span className="size-1.5 shrink-0 rounded-full bg-reiterate-dim/70 transition group-hover:bg-reiterate-orange" /><span className="truncate">{index === 0 && hasMessages ? "Current session" : session}</span></button>)}</div></nav>

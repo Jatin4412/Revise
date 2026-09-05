@@ -1,4 +1,5 @@
-import { FormEvent, KeyboardEvent, useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
+import type { FormEvent, KeyboardEvent } from "react";
 
 type ComposerProps = {
   value: string;

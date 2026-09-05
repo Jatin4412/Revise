@@ -1,24 +1,21 @@
-* {
-  box-sizing: border-box;
+@import "tailwindcss";
+
+@theme {
+  --color-reiterate-bg: #120b07;
+  --color-reiterate-deep: #0d0805;
+  --color-reiterate-surface: #1a120d;
+  --color-reiterate-raised: #2a1e16;
+  --color-reiterate-text: #fff7ed;
+  --color-reiterate-muted: #d6b8a1;
+  --color-reiterate-dim: #8b6f5b;
+  --color-reiterate-orange: #fb923c;
+  --color-reiterate-amber: #f59e0b;
+  --color-reiterate-red: #ef4444;
 }
 
 :root {
   color-scheme: dark;
-  --bg: #120b07;
-  --bg-deep: #0d0805;
-  --surface: #1a120d;
-  --surface-raised: #2a1e16;
-  --surface-soft: #211710;
-  --border: #3a281d;
-  --border-soft: rgb(255 183 128 / 10%);
-  --text: #fff7ed;
-  --muted: #d6b8a1;
-  --muted-dim: #8b6f5b;
-  --accent: #fb923c;
-  --accent-warm: #f59e0b;
-  --accent-hot: #ef4444;
   --accent-gradient: linear-gradient(135deg, #fb923c 0%, #f59e0b 48%, #ef4444 100%);
-  --ambient-gradient: radial-gradient(circle at 50% 0%, rgb(251 146 60 / 14%), transparent 38%), radial-gradient(circle at 85% 25%, rgb(239 68 68 / 8%), transparent 30%);
 }
 
 html,
@@ -27,15 +24,16 @@ body {
 }
 
 html {
-  background: var(--bg-deep);
+  background: #0d0805;
 }
 
 body {
   margin: 0;
   background:
-    var(--ambient-gradient),
-    var(--bg);
-  color: var(--text);
+    radial-gradient(circle at 50% -10%, rgb(251 146 60 / 12%), transparent 34%),
+    radial-gradient(circle at 92% 22%, rgb(239 68 68 / 7%), transparent 28%),
+    #120b07;
+  color: #fff7ed;
   font-family: Arial, Helvetica, sans-serif;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
@@ -53,7 +51,7 @@ button {
 
 ::selection {
   background: rgb(251 146 60 / 28%);
-  color: var(--text);
+  color: #fff7ed;
 }
 
 ::-webkit-scrollbar {
@@ -67,6 +65,16 @@ button {
 ::-webkit-scrollbar-thumb {
   border: 2px solid transparent;
   border-radius: 999px;
-  background: var(--surface-raised);
+  background: #2a1e16;
   background-clip: padding-box;
+}
+
+@keyframes reiterate-float {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(0, -10px, 0) scale(1.025); }
+}
+
+@keyframes reiterate-pulse {
+  0%, 100% { opacity: .42; transform: scale(.94); }
+  50% { opacity: .75; transform: scale(1); }
 }

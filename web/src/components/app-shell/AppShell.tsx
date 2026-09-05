@@ -50,7 +50,13 @@ export function AppShell() {
         />
       </div>
 
-      <div className="absolute inset-y-[clamp(.5rem,1vw,.9rem)] left-[clamp(.5rem,1vw,.9rem)] z-40 w-12 lg:hidden">
+      <div
+        className={
+          mobileSidebarOpen
+            ? "absolute inset-y-[clamp(.5rem,1vw,.9rem)] left-[clamp(.5rem,1vw,.9rem)] z-40 w-[min(18rem,calc(100vw - 1rem))] lg:hidden"
+            : "absolute inset-y-[clamp(.5rem,1vw,.9rem)] left-[clamp(.5rem,1vw,.9rem)] z-40 w-12 lg:hidden"
+        }
+      >
         <Sidebar
           sessions={sessions}
           hasMessages={messages.length > 0}

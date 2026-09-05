@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 
 import { Composer } from "@/components/composer/Composer";
 import { Conversation, type Message } from "@/components/conversation/Conversation";
@@ -20,6 +20,15 @@ export function AppShell() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
+  useEffect(() => {
+    if (!mobileSidebarOpen) return;
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") setMobileSidebarOpen(false);
+    }
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [mobileSidebarOpen]);
+
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const content = input.trim();
@@ -31,6 +40,7 @@ export function AppShell() {
   function handleNewSession() {
     setMessages([]);
     setInput("");
+    setMobileSidebarOpen(false);
   }
 
   return (

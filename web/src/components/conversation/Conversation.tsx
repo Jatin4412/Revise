@@ -1,3 +1,7 @@
+"use client";
+
+import { useEffect, useRef } from "react";
+
 export type Message = {
   id: number;
   role: "user" | "assistant";
@@ -37,17 +41,30 @@ function EmptyState({ starters, onStarterSelect }: Omit<ConversationProps, "mess
 }
 
 export function Conversation({ messages, starters, onStarterSelect }: ConversationProps) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const previousMessageCount = useRef(messages.length);
+
+  useEffect(() => {
+    if (messages.length > previousMessageCount.current) {
+      const container = scrollRef.current;
+      if (container) {
+        container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
+      }
+    }
+    previousMessageCount.current = messages.length;
+  }, [messages.length]);
+
   return (
-    <div className="relative flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
+    <div ref={scrollRef} className="relative flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
       {messages.length === 0 ? (
         <EmptyState starters={starters} onStarterSelect={onStarterSelect} />
       ) : (
-        <div className="mx-auto flex w-[min(92vw,54rem)] flex-col gap-[clamp(1.5rem,4vh,2.5rem)] py-[clamp(1.5rem,4vh,3.5rem)]">
+        <div className="mx-auto flex w-[min(92vw,54rem)] max-w-full flex-col gap-[clamp(1.25rem,4vh,2.5rem)] px-1 py-[clamp(1.25rem,4vh,3.5rem)] sm:px-0">
           {messages.map((message) => (
-            <article className={message.role === "user" ? "ml-auto w-[min(88%,42rem)]" : "w-[min(92%,46rem)]"} key={message.id}>
+            <article className={message.role === "user" ? "ml-auto w-[min(88%,42rem)] max-w-full" : "w-[min(92%,46rem)] max-w-full"} key={message.id}>
               <div className="mb-2 flex items-center gap-2 text-[0.62rem] font-bold uppercase tracking-[0.16em] text-reiterate-dim"><span className={message.role === "user" ? "size-1.5 rounded-full bg-reiterate-amber" : "size-1.5 rounded-full bg-reiterate-orange"} />{message.role === "user" ? "You" : "Reiterate"}</div>
-              <div className={message.role === "user" ? "rounded-[1.35rem_1.35rem_.4rem_1.35rem] border border-reiterate-orange/10 bg-reiterate-raised/75 px-5 py-4 shadow-[inset_0_1px_rgba(255,255,255,.03)]" : "rounded-[1.35rem_1.35rem_1.35rem_.4rem] border border-white/[0.06] bg-white/[0.018] px-5 py-4"}>
-                <p className="whitespace-pre-wrap text-[0.92rem] leading-7 text-reiterate-text">{message.content}</p>
+              <div className={message.role === "user" ? "rounded-[1.35rem_1.35rem_.4rem_1.35rem] border border-reiterate-orange/10 bg-reiterate-raised/75 px-[clamp(.9rem,2vw,1.25rem)] py-4 shadow-[inset_0_1px_rgba(255,255,255,.03)]" : "rounded-[1.35rem_1.35rem_1.35rem_.4rem] border border-white/[0.06] bg-white/[0.018] px-[clamp(.9rem,2vw,1.25rem)] py-4"}>
+                <p className="whitespace-pre-wrap break-words text-[0.92rem] leading-7 text-reiterate-text">{message.content}</p>
               </div>
             </article>
           ))}

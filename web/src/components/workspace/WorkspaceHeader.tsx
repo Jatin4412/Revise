@@ -1,0 +1,15 @@
+export function WorkspaceHeader() {
+  return (
+    <header className="flex min-h-[clamp(3.25rem,7vh,4.25rem)] shrink-0 items-center justify-between border-b border-white/[0.07] bg-reiterate-bg/45 px-[clamp(1rem,2.5vw,2.5rem)] backdrop-blur-2xl">
+      <div className="flex min-w-0 items-center gap-2.5">
+        <span className="text-sm font-semibold tracking-[-0.02em]">Reiterate</span>
+        <span className="hidden text-reiterate-dim sm:inline">/</span>
+        <span className="hidden max-w-[18rem] truncate text-xs text-reiterate-dim sm:inline">Untitled session</span>
+      </div>
+      <div className="flex items-center gap-2 rounded-full border border-white/[0.07] bg-white/[0.02] px-3 py-1.5 text-[0.65rem] text-reiterate-muted">
+        <span className="size-1.5 rounded-full bg-reiterate-orange shadow-[0_0_10px_rgba(251,146,60,.65)]" />
+        Ready
+      </div>
+    </header>
+  );
+}

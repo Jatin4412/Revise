@@ -65,7 +65,7 @@ export function AppShell() {
         )}
 
         <section className={`relative z-10 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-reiterate-bg/80 lg:bg-transparent ${sidebarOpen ? "rounded-r-[clamp(1.25rem,1.8vw,1.75rem)] border-y border-r border-white/[0.07] shadow-[0_1rem_4rem_rgba(0,0,0,.16),inset_0_1px_rgba(255,255,255,.035)] lg:rounded-[clamp(1.25rem,1.8vw,1.75rem)] lg:border" : "rounded-r-[clamp(1.25rem,1.8vw,1.75rem)] border-y border-r border-white/[0.07]"}`} aria-label="Conversation workspace">
-          <WorkspaceHeader onMenu={() => setMobileSidebarOpen(true)} />
+          <WorkspaceHeader />
           <Conversation messages={messages} />
           <Composer value={input} onChange={setInput} onSubmit={handleSubmit} />
         </section>

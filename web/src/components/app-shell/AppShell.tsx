@@ -29,13 +29,13 @@ export function AppShell() {
   }
 
   return (
-    <main className="relative flex min-h-dvh overflow-hidden bg-reiterate-bg text-reiterate-text">
+    <main className="relative flex h-dvh w-full gap-[clamp(.5rem,1vw,.9rem)] overflow-hidden bg-reiterate-bg p-[clamp(.5rem,1vw,.9rem)] text-reiterate-text">
       <div className="pointer-events-none absolute -left-[12vw] top-[18vh] size-[32vw] max-h-[34rem] max-w-[34rem] rounded-full bg-reiterate-orange/8 blur-[110px]" />
       <div className="pointer-events-none absolute right-[-10vw] top-[-12vh] size-[38vw] max-h-[42rem] max-w-[42rem] rounded-full bg-reiterate-red/7 blur-[120px]" />
       <div className="pointer-events-none absolute bottom-[-18vw] left-[42%] size-[34vw] max-h-[34rem] max-w-[34rem] rounded-full bg-reiterate-amber/5 blur-[110px]" />
 
-      <aside className="relative z-10 hidden w-[clamp(15rem,18vw,18rem)] shrink-0 flex-col border-r border-white/7 bg-reiterate-deep/65 px-[clamp(1rem,1.5vw,1.5rem)] py-[clamp(1rem,2vh,1.5rem)] backdrop-blur-2xl lg:flex">
-        <div className="mb-[clamp(1.5rem,3vh,2.5rem)] flex items-center justify-between px-1">
+      <aside className="relative z-10 hidden h-full w-[clamp(15rem,18vw,18rem)] shrink-0 flex-col overflow-hidden rounded-[clamp(1.25rem,1.8vw,1.75rem)] border border-white/7 bg-reiterate-deep/75 px-[clamp(1rem,1.5vw,1.5rem)] py-[clamp(1rem,2vh,1.5rem)] shadow-[0_1rem_4rem_rgba(0,0,0,.16),inset_0_1px_rgba(255,255,255,.035)] backdrop-blur-2xl lg:flex">
+        <div className="mb-[clamp(1.25rem,3vh,2.25rem)] flex items-center justify-between px-1">
           <div>
             <p className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-reiterate-muted/60">Workspace</p>
             <div className="mt-1 text-[clamp(1rem,1.2vw,1.125rem)] font-bold tracking-[-0.03em]">Reiterate</div>
@@ -48,7 +48,7 @@ export function AppShell() {
           New session
         </button>
 
-        <nav className="mt-[clamp(1.5rem,4vh,2.75rem)]" aria-label="Sessions">
+        <nav className="mt-[clamp(1.5rem,4vh,2.5rem)]" aria-label="Sessions">
           <div className="mb-2 flex items-center justify-between px-2 text-[0.65rem] font-bold uppercase tracking-[0.18em] text-reiterate-dim">
             <span>Recent sessions</span><span>{sessions.length.toString().padStart(2, "0")}</span>
           </div>
@@ -71,7 +71,7 @@ export function AppShell() {
         </div>
       </aside>
 
-      <section className="relative z-10 flex min-w-0 flex-1 flex-col overflow-hidden" aria-label="Conversation">
+      <section className="relative z-10 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[clamp(1.25rem,1.8vw,1.75rem)] border border-white/7 bg-reiterate-bg/85 shadow-[0_1rem_4rem_rgba(0,0,0,.2),inset_0_1px_rgba(255,255,255,.035)] backdrop-blur-xl" aria-label="Conversation">
         <header className="flex h-[clamp(3.5rem,7vh,4.5rem)] shrink-0 items-center justify-between border-b border-white/7 bg-reiterate-bg/55 px-[clamp(1rem,3vw,3rem)] backdrop-blur-2xl">
           <div className="flex min-w-0 items-center gap-2.5"><span className="text-sm font-semibold tracking-[-0.02em]">Reiterate</span><span className="hidden text-reiterate-dim sm:inline">/</span><span className="hidden max-w-[18rem] truncate text-xs text-reiterate-dim sm:inline">Untitled session</span></div>
           <div className="flex items-center gap-2 rounded-full border border-white/7 bg-white/[0.025] px-3 py-1.5 text-[0.68rem] text-reiterate-muted"><span className="size-1.5 rounded-full bg-reiterate-orange shadow-[0_0_10px_rgba(251,146,60,.7)]" />Ready</div>
@@ -79,23 +79,23 @@ export function AppShell() {
 
         <div className="relative flex min-h-0 flex-1 flex-col overflow-y-auto">
           {messages.length === 0 ? (
-            <div className="mx-auto flex min-h-full w-[min(92vw,54rem)] flex-1 flex-col justify-center py-[clamp(4rem,10vh,8rem)]">
-              <div className="relative mx-auto mb-[clamp(1.75rem,4vh,2.75rem)]">
-                <div className="absolute -inset-10 rounded-full bg-reiterate-orange/10 blur-3xl motion-safe:animate-[reiterate-pulse_4s_ease-in-out_infinite]" />
-                <div className="relative grid size-[clamp(4rem,7vw,5.5rem)] place-items-center rounded-[clamp(1.25rem,2vw,1.6rem)] border border-reiterate-orange/25 bg-gradient-to-br from-reiterate-orange/20 via-reiterate-amber/10 to-reiterate-red/5 text-[clamp(1.25rem,2vw,1.5rem)] font-bold shadow-[0_1rem_4rem_rgba(239,68,68,.12),inset_0_1px_rgba(255,255,255,.08)] motion-safe:animate-[reiterate-float_6s_ease-in-out_infinite]">R</div>
+            <div className="mx-auto flex min-h-0 w-[min(92vw,54rem)] flex-1 flex-col justify-center py-[clamp(1.5rem,4vh,3rem)]">
+              <div className="relative mx-auto mb-[clamp(1rem,2.5vh,2rem)]">
+                <div className="absolute -inset-8 rounded-full bg-reiterate-orange/10 blur-3xl motion-safe:animate-[reiterate-pulse_4s_ease-in-out_infinite]" />
+                <div className="relative grid size-[clamp(3.25rem,6vw,4.75rem)] place-items-center rounded-[clamp(1rem,1.7vw,1.4rem)] border border-reiterate-orange/25 bg-gradient-to-br from-reiterate-orange/20 via-reiterate-amber/10 to-reiterate-red/5 text-[clamp(1.1rem,1.8vw,1.35rem)] font-bold shadow-[0_1rem_4rem_rgba(239,68,68,.12),inset_0_1px_rgba(255,255,255,.08)] motion-safe:animate-[reiterate-float_6s_ease-in-out_infinite]">R</div>
               </div>
 
               <div className="mx-auto max-w-[48rem] text-center">
-                <p className="mb-3 text-[0.68rem] font-bold uppercase tracking-[0.28em] text-reiterate-orange/80">A workspace for better thinking</p>
-                <h1 className="text-[clamp(2.35rem,5vw,4.5rem)] font-semibold leading-[0.98] tracking-[-0.055em]">What are you<br /><span className="bg-gradient-to-r from-reiterate-orange via-reiterate-amber to-reiterate-red bg-clip-text text-transparent">working on?</span></h1>
-                <p className="mx-auto mt-[clamp(1rem,2.5vh,1.5rem)] max-w-[37rem] text-[clamp(0.9rem,1.4vw,1rem)] leading-7 text-reiterate-muted/80">Bring an idea, question, or half-formed thought. Reiterate helps you push it further.</p>
+                <p className="mb-[clamp(.5rem,1vh,.75rem)] text-[0.65rem] font-bold uppercase tracking-[0.26em] text-reiterate-orange/80">A workspace for better thinking</p>
+                <h1 className="text-[clamp(2rem,4.8vw,4.25rem)] font-semibold leading-[0.98] tracking-[-0.055em]">What are you<br /><span className="bg-gradient-to-r from-reiterate-orange via-reiterate-amber to-reiterate-red bg-clip-text text-transparent">working on?</span></h1>
+                <p className="mx-auto mt-[clamp(.75rem,1.8vh,1.25rem)] max-w-[37rem] text-[clamp(0.82rem,1.25vw,1rem)] leading-6 text-reiterate-muted/80">Bring an idea, question, or half-formed thought. Reiterate helps you push it further.</p>
               </div>
 
-              <div className="mx-auto mt-[clamp(2rem,5vh,3.5rem)] grid w-full max-w-[50rem] grid-cols-1 gap-3 sm:grid-cols-3">
+              <div className="mx-auto mt-[clamp(1.25rem,3vh,2.25rem)] grid w-full max-w-[50rem] grid-cols-1 gap-[clamp(.5rem,1vw,.75rem)] sm:grid-cols-3">
                 {starters.map((starter, index) => (
-                  <button className="group min-h-[clamp(7rem,14vh,8.5rem)] rounded-[1.35rem] border border-white/7 bg-white/[0.025] p-4 text-left transition duration-200 hover:-translate-y-1 hover:border-reiterate-orange/20 hover:bg-reiterate-orange/[0.045] hover:shadow-[0_1.5rem_4rem_rgba(0,0,0,.18)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-reiterate-orange/40" type="button" key={starter} onClick={() => setInput(starter)}>
-                    <span className="mb-6 flex size-7 items-center justify-center rounded-full border border-reiterate-orange/15 bg-reiterate-orange/8 text-[0.65rem] font-bold text-reiterate-orange/80">0{index + 1}</span>
-                    <span className="block text-sm font-medium leading-5 text-reiterate-muted transition group-hover:text-reiterate-text">{starter}</span>
+                  <button className="group min-h-[clamp(5.75rem,11vh,7.25rem)] rounded-[1.25rem] border border-white/7 bg-white/[0.025] p-[clamp(.75rem,1.2vw,1rem)] text-left transition duration-200 hover:-translate-y-1 hover:border-reiterate-orange/20 hover:bg-reiterate-orange/[0.045] hover:shadow-[0_1.5rem_4rem_rgba(0,0,0,.18)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-reiterate-orange/40" type="button" key={starter} onClick={() => setInput(starter)}>
+                    <span className="mb-3 flex size-6 items-center justify-center rounded-full border border-reiterate-orange/15 bg-reiterate-orange/8 text-[0.6rem] font-bold text-reiterate-orange/80">0{index + 1}</span>
+                    <span className="block text-[0.8rem] font-medium leading-5 text-reiterate-muted transition group-hover:text-reiterate-text">{starter}</span>
                   </button>
                 ))}
               </div>

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Protocol
+from typing import Callable, Protocol
 
-from .revise.models import DimensionResult, EvaluationProfile, TaskContract, Evidence
+from .revise.models import DimensionResult, EvaluationProfile, Evidence, TaskContract
+
+DimensionEvaluator = Callable[[TaskContract, str], DimensionResult]
 
 
 class Primary(Protocol):
@@ -20,7 +22,7 @@ class Secondary(Protocol):
         self,
         contract: TaskContract,
         profile: EvaluationProfile,
-    ) -> Mapping[str, callable[[TaskContract, str], DimensionResult]]:
+    ) -> Mapping[str, DimensionEvaluator]:
         ...
 
 
@@ -39,7 +41,7 @@ class Verifier(Protocol):
 class FunctionPrimary:
     """Small adapter for a plain generation function."""
 
-    def __init__(self, function):
+    def __init__(self, function: Callable[[TaskContract, str | None], str]) -> None:
         self._function = function
 
     def generate(self, contract: TaskContract, *, context: str | None = None) -> str:

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from typing import Callable, Iterable
+from collections.abc import Iterable
+from typing import Callable
 
 from .evidence import fuse_evidence
-from .models import DimensionResult, EvaluationProfile, EvaluationResult, Evidence, TaskContract
+from .models import Decision, DimensionResult, EvaluationProfile, EvaluationResult, Evidence, TaskContract
 
 DimensionEvaluator = Callable[[TaskContract, str], DimensionResult]
 
@@ -31,7 +32,7 @@ def evaluate(
     confidence = sum(d.confidence for d in known) / len(known) if known else fused.confidence
 
     return EvaluationResult(
-        decision=__import__("engine.revise.models", fromlist=["Decision"]).Decision.ACCEPT,
+        decision=Decision.ACCEPT,
         overall_score=sum(scores) / len(scores) if scores else None,
         confidence=confidence,
         dimensions=dimensions,

@@ -1,7 +1,8 @@
 """Revise engine package."""
 
 from .engine import Engine, EngineResult
-from .providers import FunctionPrimary, OpenAIPrimary, Primary, Secondary, Verifier
+from .model import ModelRouter, ModelSelection
+from .providers import FunctionPrimary, GeminiPrimary, OpenAIPrimary, Primary, Secondary, Verifier
 from .service import EngineRequest, EngineResponse, EngineService, create_default_service
 
 __all__ = [
@@ -11,6 +12,9 @@ __all__ = [
     "EngineResponse",
     "EngineService",
     "FunctionPrimary",
+    "GeminiPrimary",
+    "ModelRouter",
+    "ModelSelection",
     "OpenAIPrimary",
     "Primary",
     "Secondary",

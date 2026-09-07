@@ -23,13 +23,7 @@ class EngineResult:
 class Engine:
     """Provider-agnostic generation, evaluation, revision, and verification loop."""
 
-    def __init__(
-        self,
-        primary: Primary,
-        *,
-        secondary: Secondary | None = None,
-        verifier: Verifier | None = None,
-    ) -> None:
+    def __init__(self, primary: Primary, *, secondary: Secondary | None = None, verifier: Verifier | None = None) -> None:
         self.primary = primary
         self.secondary = secondary
         self.verifier = verifier
@@ -42,10 +36,12 @@ class Engine:
         initial_context: str | None = None,
         evidence: Iterable[Evidence] = (),
         primary: Primary | None = None,
+        secondary: Secondary | None = None,
     ) -> EngineResult:
-        """Run the engine, optionally overriding the configured Primary for this request."""
+        """Run the bounded Revise loop with optional per-request role overrides."""
         profile = profile or build_profile(contract)
         active_primary = primary or self.primary
+        active_secondary = secondary or self.secondary
         supplied_evidence = tuple(evidence)
         versions: list[Version] = []
         previous: Version | None = None
@@ -54,11 +50,11 @@ class Engine:
             context = initial_context if previous is None else self._revision_context(previous)
             response = active_primary.generate(contract, context=context)
             version = Version(f"v{len(versions)}", response, parent_id=previous.id if previous else None)
-
             result = self._evaluate(
                 contract,
                 response,
                 profile,
+                secondary=active_secondary,
                 evidence=supplied_evidence,
                 revisions_used=revision_index,
             )
@@ -77,13 +73,18 @@ class Engine:
         response: str,
         profile: EvaluationProfile,
         *,
+        secondary: Secondary | None,
         evidence: Iterable[Evidence],
         revisions_used: int,
     ) -> EvaluationResult:
-        evaluators = self.secondary.evaluators(contract, profile) if self.secondary else {}
-        base = evaluate(contract, response, profile, dict(evaluators), evidence=evidence)
+        if secondary is not None and hasattr(secondary, "evaluate_candidate"):
+            base = secondary.evaluate_candidate(contract, response, profile)  # type: ignore[attr-defined]
+        else:
+            evaluators = secondary.evaluators(contract, profile) if secondary else {}
+            base = evaluate(contract, response, profile, dict(evaluators), evidence=evidence)
+
         verifier_evidence = self.verifier.verify(contract, response, profile) if self.verifier else ()
-        fused = fuse_evidence((*base.evidence, *verifier_evidence))
+        fused = fuse_evidence((*base.evidence, *evidence, *verifier_evidence))
         result = EvaluationResult(
             decision=base.decision,
             overall_score=base.overall_score,

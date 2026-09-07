@@ -5,18 +5,21 @@ from dataclasses import dataclass
 
 from .contracts import make_contract
 from .engine import Engine
-from .model import ModelRouter, ModelSelection
-from .providers import FunctionPrimary, GeminiPrimary, OpenAIPrimary
+from .llm import build_primary, build_secondary
+from .model import ModelRouter, ModelSelection, SecondaryRouter
+from .providers import FunctionPrimary
 from .revise.models import Decision, Mode
 
 
 @dataclass(frozen=True)
 class EngineRequest:
-    """Minimal request boundary for UI-to-engine integration."""
+    """Minimal request boundary with independent Primary and Secondary selections."""
 
     prompt: str
     mode: Mode = Mode.BASIC
-    model: ModelSelection | None = None
+    model: ModelSelection | None = None  # Backward-compatible alias for Primary selection.
+    primary_model: ModelSelection | None = None
+    secondary_model: ModelSelection | None = None
 
 
 @dataclass(frozen=True)
@@ -28,19 +31,23 @@ class EngineResponse:
     version_id: str | None
 
     def to_dict(self) -> dict[str, str | None]:
-        return {
-            "text": self.text,
-            "decision": self.decision.value,
-            "version_id": self.version_id,
-        }
+        return {"text": self.text, "decision": self.decision.value, "version_id": self.version_id}
 
 
 class EngineService:
-    """Thin application boundary; HTTP/transport concerns stay outside the engine."""
+    """Thin application boundary; transport concerns stay outside the engine."""
 
-    def __init__(self, engine: Engine, *, model_router: ModelRouter | None = None) -> None:
+    def __init__(
+        self,
+        engine: Engine,
+        *,
+        model_router: ModelRouter | None = None,
+        primary_router: ModelRouter | None = None,
+        secondary_router: SecondaryRouter | None = None,
+    ) -> None:
         self.engine = engine
-        self.model_router = model_router
+        self.primary_router = primary_router or model_router
+        self.secondary_router = secondary_router
 
     def handle(self, request: EngineRequest) -> EngineResponse:
         prompt = request.prompt.strip()
@@ -48,8 +55,10 @@ class EngineService:
             raise ValueError("prompt must not be empty")
 
         contract = make_contract(prompt, mode=request.mode)
-        primary = self.model_router.resolve(request.model) if self.model_router else None
-        result = self.engine.run(contract, primary=primary)
+        primary_selection = request.primary_model or request.model
+        primary = self.primary_router.resolve(primary_selection) if self.primary_router else None
+        secondary = self.secondary_router.resolve(request.secondary_model) if self.secondary_router else None
+        result = self.engine.run(contract, primary=primary, secondary=secondary)
         version = result.final_version
         return EngineResponse(
             text=version.response if version else "",
@@ -58,7 +67,6 @@ class EngineService:
         )
 
     def handle_payload(self, payload: dict[str, object]) -> dict[str, str | None]:
-        """Convert a transport payload into the stable engine response shape."""
         prompt = payload.get("prompt")
         if not isinstance(prompt, str):
             raise ValueError("prompt must be a string")
@@ -69,26 +77,48 @@ class EngineService:
         except ValueError as exc:
             raise ValueError(f"unsupported mode: {raw_mode}") from exc
 
-        model = _parse_model_selection(payload.get("model"))
-        return self.handle(EngineRequest(prompt=prompt, mode=mode, model=model)).to_dict()
+        legacy_primary = _parse_model_selection(payload.get("model"))
+        primary = _parse_model_selection(payload.get("primary_model")) or legacy_primary
+        secondary = _parse_model_selection(payload.get("secondary_model"))
+        return self.handle(
+            EngineRequest(prompt=prompt, mode=mode, primary_model=primary, secondary_model=secondary)
+        ).to_dict()
 
 
 def create_default_service() -> EngineService:
-    """Create the runtime with provider selection kept outside the core engine."""
-    default_provider = os.environ.get("REVISE_PROVIDER", "gemini")
-    default_model = os.environ.get("REVISE_MODEL")
-    default_selection = ModelSelection(default_provider, default_model)
-
-    router = ModelRouter(
-        {
-            "gemini": lambda model: GeminiPrimary(model=model),
-            "openai": lambda model: OpenAIPrimary(model=model),
-        },
-        default=default_selection,
+    """Create the runtime with role and provider selection outside the core engine."""
+    primary_selection = ModelSelection(
+        os.environ.get("REVISE_PRIMARY_PROVIDER", "gemini"),
+        os.environ.get("REVISE_PRIMARY_MODEL") or os.environ.get("GEMINI_PRIMARY_MODEL"),
     )
+    secondary_selection = ModelSelection(
+        os.environ.get("REVISE_SECONDARY_PROVIDER", "gemini"),
+        os.environ.get("REVISE_SECONDARY_MODEL") or os.environ.get("GEMINI_SECONDARY_MODEL"),
+    )
+
+    primary_router = ModelRouter(
+        {
+            "gemini": lambda model: build_primary("gemini", model),
+            "openai": lambda model: build_primary("openai", model),
+            "grok": lambda model: build_primary("grok", model),
+            "ollama": lambda model: build_primary("ollama", model),
+        },
+        default=primary_selection,
+    )
+    secondary_router = SecondaryRouter(
+        {
+            "gemini": lambda model: build_secondary("gemini", model),
+            "openai": lambda model: build_secondary("openai", model),
+            "grok": lambda model: build_secondary("grok", model),
+            "ollama": lambda model: build_secondary("ollama", model),
+        },
+        default=secondary_selection,
+    )
+
     return EngineService(
         Engine(FunctionPrimary(lambda _contract, _context: "")),
-        model_router=router,
+        primary_router=primary_router,
+        secondary_router=secondary_router,
     )
 
 
@@ -96,8 +126,7 @@ def _parse_model_selection(raw: object) -> ModelSelection | None:
     if raw is None:
         return None
     if not isinstance(raw, dict):
-        raise ValueError("model must be an object with provider and optional model")
-
+        raise ValueError("model selection must be an object with provider and optional model")
     provider = raw.get("provider")
     model = raw.get("model")
     if not isinstance(provider, str) or not provider.strip():

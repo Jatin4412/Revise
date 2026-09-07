@@ -3,6 +3,8 @@ from __future__ import annotations
 import unittest
 
 from engine import Engine, EngineRequest, EngineService, FunctionPrimary
+from engine.llm import LLMSecondary
+from engine.model import ModelRouter, ModelSelection, SecondaryRouter
 from engine.revise.models import DimensionResult, EvaluationProfile, Mode, TaskContract
 
 
@@ -27,11 +29,11 @@ class BasicSecondary:
 
 
 class EngineTests(unittest.TestCase):
-    def test_basic_generation_accepts_without_secondary(self) -> None:
+    def test_missing_evaluation_does_not_pass(self) -> None:
         primary = FunctionPrimary(lambda contract, context: "hello")
         result = Engine(primary).run(TaskContract(goal="say hello"))
 
-        self.assertEqual(result.decision.value, "accept")
+        self.assertEqual(result.decision.value, "ask")
         self.assertEqual(result.final_version.response, "hello")
         self.assertEqual(len(result.versions), 1)
 
@@ -63,12 +65,43 @@ class EngineTests(unittest.TestCase):
             seen.append(context or "none")
             return contract.goal
 
-        service = EngineService(Engine(FunctionPrimary(generate)))
+        class PassingSecondary:
+            def evaluators(self, contract, profile):
+                return {
+                    name: lambda _contract, _response: DimensionResult(1.0, 1.0, "pass", "ok")
+                    for name in profile.dimensions
+                }
+
+        service = EngineService(Engine(FunctionPrimary(generate), secondary=PassingSecondary()))
         response = service.handle(EngineRequest(prompt="test prompt"))
 
         self.assertEqual(response.text, "test prompt")
         self.assertEqual(response.version_id, "v0")
         self.assertEqual(seen, ["none"])
+
+    def test_model_routers_are_role_independent(self) -> None:
+        primary = ModelRouter({"fake": lambda model: ("primary", model)}, default=ModelSelection("fake", "strong"))
+        secondary = SecondaryRouter({"fake": lambda model: ("secondary", model)}, default=ModelSelection("fake", "light"))
+
+        self.assertEqual(primary.resolve().model, "strong")
+        self.assertEqual(secondary.resolve().model, "light")
+
+    def test_llm_secondary_parses_candidate_evaluation(self) -> None:
+        seen: list[str] = []
+
+        def generate(prompt: str) -> str:
+            seen.append(prompt)
+            return '{"dimensions":{"task_completion":{"score":1,"confidence":0.9,"status":"pass","reason":"complete"}},"issues":[],"revision":{"strategy":"none","instructions":[]}}'
+
+        secondary = LLMSecondary(generate)
+        result = secondary.evaluate_candidate(
+            TaskContract(goal="do the task"),
+            "candidate answer",
+            EvaluationProfile(dimensions=("task_completion",)),
+        )
+
+        self.assertEqual(result.dimensions["task_completion"].status, "pass")
+        self.assertIn("candidate answer", seen[0])
 
 
 if __name__ == "__main__":

@@ -7,14 +7,7 @@ from .providers import Primary, Secondary, Verifier
 from .revise.decision import decide
 from .revise.evaluator import evaluate
 from .revise.evidence import fuse_evidence
-from .revise.models import (
-    Decision,
-    EvaluationProfile,
-    EvaluationResult,
-    Evidence,
-    TaskContract,
-    Version,
-)
+from .revise.models import Decision, EvaluationProfile, EvaluationResult, Evidence, TaskContract, Version
 from .revise.profile import build_profile
 
 
@@ -55,16 +48,9 @@ class Engine:
         previous: Version | None = None
 
         for revision_index in range(profile.max_revisions + 1):
-            revision_context = self._revision_context(previous)
-            response = self.primary.generate(
-                contract,
-                context=initial_context if previous is None else revision_context,
-            )
-            version = Version(
-                id=f"v{len(versions)}",
-                response=response,
-                parent_id=previous.id if previous else None,
-            )
+            context = initial_context if previous is None else self._revision_context(previous)
+            response = self.primary.generate(contract, context=context)
+            version = Version(f"v{len(versions)}", response, parent_id=previous.id if previous else None)
 
             result = self._evaluate(
                 contract,
@@ -73,22 +59,14 @@ class Engine:
                 evidence=supplied_evidence,
                 revisions_used=revision_index,
             )
-            version = Version(
-                version.id,
-                version.response,
-                result,
-                version.parent_id,
-            )
+            version = Version(version.id, version.response, result, version.parent_id)
             versions.append(version)
 
-            if result.decision is Decision.ACCEPT:
-                return EngineResult(Decision.ACCEPT, self._best_accepted(versions), tuple(versions), contract, profile)
-            if result.decision is Decision.ASK:
-                return EngineResult(Decision.ASK, self._best_accepted(versions), tuple(versions), contract, profile)
-
+            if result.decision in (Decision.ACCEPT, Decision.ASK):
+                return EngineResult(result.decision, self._best_version(versions), tuple(versions), contract, profile)
             previous = version
 
-        return EngineResult(Decision.REVISE, self._best_accepted(versions), tuple(versions), contract, profile)
+        return EngineResult(Decision.REVISE, self._best_version(versions), tuple(versions), contract, profile)
 
     def _evaluate(
         self,
@@ -99,12 +77,8 @@ class Engine:
         evidence: Iterable[Evidence],
         revisions_used: int,
     ) -> EvaluationResult:
-        # Secondary is optional in the first implementation. A supplied secondary
-        # can add dimension judgments; deterministic verifier evidence is fused in
-        # before the decision is made.
         evaluators = self.secondary.evaluators(contract, profile) if self.secondary else {}
-        base = evaluate(contract, response, profile, evaluators, evidence=evidence)
-
+        base = evaluate(contract, response, profile, dict(evaluators), evidence=evidence)
         verifier_evidence = self.verifier.verify(contract, response, profile) if self.verifier else ()
         fused = fuse_evidence((*base.evidence, *verifier_evidence))
         result = EvaluationResult(
@@ -120,24 +94,20 @@ class Engine:
         return decide(contract, profile, result, revisions_used=revisions_used)
 
     @staticmethod
-    def _revision_context(previous: Version | None) -> str | None:
-        if previous is None or previous.evaluation is None:
-            return None
-        instructions = previous.evaluation.revision.instructions
-        issues = tuple(issue.description for issue in previous.evaluation.issues)
+    def _revision_context(previous: Version) -> str:
+        evaluation = previous.evaluation
+        if evaluation is None:
+            return previous.response
         parts = ["Revise the previous response using the evaluation feedback.", previous.response]
+        issues = tuple(issue.description for issue in evaluation.issues)
         if issues:
             parts.append("Issues:\n" + "\n".join(f"- {item}" for item in issues))
-        if instructions:
-            parts.append("Revision instructions:\n" + "\n".join(f"- {item}" for item in instructions))
+        if evaluation.revision.instructions:
+            parts.append("Revision instructions:\n" + "\n".join(f"- {item}" for item in evaluation.revision.instructions))
         return "\n\n".join(parts)
 
     @staticmethod
-    def _best_accepted(versions: list[Version]) -> Version | None:
+    def _best_version(versions: list[Version]) -> Version | None:
         accepted = [v for v in versions if v.evaluation and v.evaluation.decision is Decision.ACCEPT]
-        if not accepted:
-            return None
-        return max(
-            accepted,
-            key=lambda v: (v.evaluation.overall_score or 0.0, v.evaluation.confidence),
-        )
+        candidates = accepted or [v for v in versions if v.evaluation]
+        return max(candidates, key=lambda v: (v.evaluation.overall_score or 0.0, v.evaluation.confidence), default=None)

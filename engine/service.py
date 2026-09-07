@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from .contracts import make_contract
 from .engine import Engine
 from .model import ModelRouter, ModelSelection
-from .providers import GeminiPrimary, OpenAIPrimary
+from .providers import FunctionPrimary, GeminiPrimary, OpenAIPrimary
 from .revise.models import Decision, Mode
 
 
@@ -86,7 +86,10 @@ def create_default_service() -> EngineService:
         },
         default=default_selection,
     )
-    return EngineService(Engine(FunctionPrimary(lambda _contract, _context: "")), model_router=router)
+    return EngineService(
+        Engine(FunctionPrimary(lambda _contract, _context: "")),
+        model_router=router,
+    )
 
 
 def _parse_model_selection(raw: object) -> ModelSelection | None:
@@ -102,6 +105,3 @@ def _parse_model_selection(raw: object) -> ModelSelection | None:
     if model is not None and not isinstance(model, str):
         raise ValueError("model.model must be a string when provided")
     return ModelSelection(provider=provider.strip(), model=model.strip() if model else None)
-
-
-from .providers import FunctionPrimary

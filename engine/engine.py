@@ -41,15 +41,18 @@ class Engine:
         profile: EvaluationProfile | None = None,
         initial_context: str | None = None,
         evidence: Iterable[Evidence] = (),
+        primary: Primary | None = None,
     ) -> EngineResult:
+        """Run the engine, optionally overriding the configured Primary for this request."""
         profile = profile or build_profile(contract)
+        active_primary = primary or self.primary
         supplied_evidence = tuple(evidence)
         versions: list[Version] = []
         previous: Version | None = None
 
         for revision_index in range(profile.max_revisions + 1):
             context = initial_context if previous is None else self._revision_context(previous)
-            response = self.primary.generate(contract, context=context)
+            response = active_primary.generate(contract, context=context)
             version = Version(f"v{len(versions)}", response, parent_id=previous.id if previous else None)
 
             result = self._evaluate(

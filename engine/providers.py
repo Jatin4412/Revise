@@ -63,13 +63,15 @@ class OpenAIPrimary:
         endpoint: str = "https://api.openai.com/v1/responses",
     ) -> None:
         self.api_key = api_key or os.environ.get("OPENAI_API_KEY")
-        self.model = model or os.environ.get("OPENAI_MODEL", "gpt-5.6-luna")
+        self.model = model or os.environ.get("OPENAI_MODEL")
         self.timeout = timeout
         self.endpoint = endpoint
 
     def generate(self, contract: TaskContract, *, context: str | None = None) -> str:
         if not self.api_key:
             raise RuntimeError("OPENAI_API_KEY is required for OpenAIPrimary")
+        if not self.model:
+            raise RuntimeError("OPENAI_MODEL or an explicit model is required for OpenAIPrimary")
 
         payload = json.dumps({"model": self.model, "input": _build_prompt(contract, context)}).encode("utf-8")
         req = request.Request(
@@ -93,6 +95,56 @@ class OpenAIPrimary:
         text = _extract_output_text(body)
         if not text:
             raise RuntimeError("OpenAI response did not contain output text")
+        return text
+
+
+class GeminiPrimary:
+    """Minimal Gemini generateContent adapter for server-side engine use."""
+
+    def __init__(
+        self,
+        *,
+        api_key: str | None = None,
+        model: str | None = None,
+        timeout: float = 60.0,
+        endpoint: str = "https://generativelanguage.googleapis.com/v1beta",
+    ) -> None:
+        self.api_key = api_key or os.environ.get("GEMINI_API_KEY")
+        self.model = model or os.environ.get("GEMINI_MODEL", "gemini-3.8-flash")
+        self.timeout = timeout
+        self.endpoint = endpoint.rstrip("/")
+
+    def generate(self, contract: TaskContract, *, context: str | None = None) -> str:
+        if not self.api_key:
+            raise RuntimeError("GEMINI_API_KEY is required for GeminiPrimary")
+
+        payload = json.dumps(
+            {
+                "contents": [{"parts": [{"text": _build_prompt(contract, context)}]}],
+            }
+        ).encode("utf-8")
+        url = f"{self.endpoint}/models/{self.model}:generateContent"
+        req = request.Request(
+            url,
+            data=payload,
+            method="POST",
+            headers={
+                "x-goog-api-key": self.api_key,
+                "Content-Type": "application/json",
+            },
+        )
+        try:
+            with request.urlopen(req, timeout=self.timeout) as response:
+                body = json.loads(response.read().decode("utf-8"))
+        except error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")
+            raise RuntimeError(f"Gemini request failed ({exc.code}): {detail}") from exc
+        except error.URLError as exc:
+            raise RuntimeError(f"Gemini request failed: {exc.reason}") from exc
+
+        text = _extract_gemini_text(body)
+        if not text:
+            raise RuntimeError("Gemini response did not contain output text")
         return text
 
 
@@ -129,4 +181,18 @@ def _extract_output_text(payload: dict) -> str:
                 text = content.get("text")
                 if isinstance(text, str):
                     chunks.append(text)
+    return "\n".join(chunks).strip()
+
+
+def _extract_gemini_text(payload: dict) -> str:
+    chunks: list[str] = []
+    for candidate in payload.get("candidates", []):
+        if not isinstance(candidate, dict):
+            continue
+        content = candidate.get("content", {})
+        if not isinstance(content, dict):
+            continue
+        for part in content.get("parts", []):
+            if isinstance(part, dict) and isinstance(part.get("text"), str):
+                chunks.append(part["text"])
     return "\n".join(chunks).strip()

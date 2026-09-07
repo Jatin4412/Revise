@@ -8,6 +8,27 @@ The Decision Engine converts evaluation findings into a bounded control decision
 - **REVISE** — a material correctable failure exists and revision budget remains.
 - **ASK** — required information is missing, ambiguity blocks reliable completion, or continued revision cannot safely resolve the problem.
 
+## Runtime flow
+
+```text
+Task Contract
+    ↓
+Primary generation
+    ↓
+Secondary evaluation (optional in the basic pass)
+    ↓
+Deterministic / external verification (optional)
+    ↓
+Evidence fusion
+    ↓
+Decision
+ ├─ ACCEPT → return best accepted version
+ ├─ REVISE → regenerate with evaluation feedback (bounded)
+ └─ ASK    → stop and return best available candidate
+```
+
+The engine is provider-agnostic. `engine/providers.py` defines the Primary, Secondary, and Verifier boundaries, while `engine/service.py` provides the minimal application request/response boundary for integration layers.
+
 ## Policy order
 
 1. Enforce hard safety, security, and critical user constraints.

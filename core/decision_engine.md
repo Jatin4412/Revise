@@ -13,6 +13,8 @@ The Decision Engine converts evaluation findings into a bounded control decision
 ```text
 Task Contract
     ↓
+Model Selection / Router
+    ↓
 Primary generation
     ↓
 Secondary evaluation (optional in the basic pass)
@@ -27,7 +29,7 @@ Decision
  └─ ASK    → stop and return best available candidate
 ```
 
-The engine is provider-agnostic. `engine/providers.py` defines the Primary, Secondary, and Verifier boundaries, while `engine/service.py` provides the minimal application request/response boundary for integration layers.
+The engine is provider-agnostic. `engine/providers.py` defines the Primary, Secondary, and Verifier boundaries, `engine/model.py` resolves a user/system model selection into a Primary, and `engine/service.py` provides the minimal application request/response boundary for integration layers. Model choice is therefore a runtime concern and does not alter the core decision policy.
 
 ## Policy order
 

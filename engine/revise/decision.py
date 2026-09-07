@@ -13,15 +13,25 @@ def decide(
     if contract.missing_context:
         return _with_decision(result, Decision.ASK)
 
-    material = [issue for issue in result.issues if issue.severity in {Severity.CRITICAL, Severity.MAJOR, Severity.MODERATE}]
+    material = [
+        issue
+        for issue in result.issues
+        if issue.severity in {Severity.CRITICAL, Severity.MAJOR, Severity.MODERATE}
+    ]
     failed_required = any(
-        name in result.dimensions and result.dimensions[name].status in {"fail", "partial"}
+        name in result.dimensions
+        and result.dimensions[name].status in {"fail", "partial"}
         for name in ("goal_alignment", "task_completion", "correctness", "instruction_following")
     )
 
     if material or failed_required:
         if revisions_used < profile.max_revisions:
             return _with_decision(result, Decision.REVISE)
+        return _with_decision(result, Decision.ASK)
+
+    # The foundation explicitly treats unknown evaluation as non-passing.
+    unknown = any(d.status == "unknown" for d in result.dimensions.values())
+    if unknown:
         return _with_decision(result, Decision.ASK)
 
     return _with_decision(result, Decision.ACCEPT)

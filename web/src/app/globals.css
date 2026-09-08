@@ -35,20 +35,25 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid rgba(255,255,2
 .message { display: flex; gap: 13px; margin-bottom: 30px; }
 .message-avatar { width: 29px; height: 29px; flex: 0 0 29px; display: grid; place-items: center; border-radius: 8px; background: #202227; color: #aeb0b5; font-size: 8px; font-weight: 700; }
 .message-body { padding-top: 4px; color: #e4e4e6; font-size: 14px; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
+.message-assistant .message-avatar { background: #17191d; border: 1px solid rgba(255,255,255,.1); color: #d1d2d5; }
+.message-thinking { color: #8d9096; }
+.message-error { color: #b4b5b9; }
 
 .composer-area { width: min(800px, calc(100% - 32px)); margin: 0 auto; padding: 10px 0 17px; }
 .composer { position: relative; overflow: visible; border: 1px solid var(--border); border-radius: 17px; background: var(--surface); box-shadow: 0 12px 35px rgba(0,0,0,.22); }
 .composer:focus-within { border-color: rgba(255,255,255,.16); background: #131519; }
 .composer textarea { display: block; width: 100%; min-height: 54px; max-height: 180px; padding: 15px 17px 5px; border: 0; outline: 0; resize: none; overflow-y: auto; background: transparent; color: var(--text); font-size: 14px; line-height: 1.5; border-radius: 17px 17px 0 0; }
 .composer textarea::placeholder { color: #777a80; }
+.composer textarea:disabled { cursor: wait; opacity: .72; }
 .composer-footer { display: flex; align-items: center; justify-content: space-between; padding: 5px 7px 7px; }
 .composer-left { display: flex; align-items: center; gap: 2px; }
 .attach-button, .send-button, .model-button { border: 0; cursor: pointer; }
 .attach-button { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 9px; background: transparent; color: #85878d; }
-.attach-button:hover { background: var(--surface-hover); color: #b9bbc0; }
+.attach-button:hover:not(:disabled) { background: var(--surface-hover); color: #b9bbc0; }
+.attach-button:disabled, .model-button:disabled { cursor: wait; opacity: .55; }
 .model-picker { position: relative; }
 .model-button { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 8px; border-radius: 8px; background: transparent; color: #898b91; font-size: 11px; }
-.model-button:hover { background: var(--surface-hover); color: #b8bac0; }
+.model-button:hover:not(:disabled) { background: var(--surface-hover); color: #b8bac0; }
 .model-button svg { color: #666970; }
 .model-menu { position: absolute; z-index: 20; left: 0; bottom: calc(100% + 9px); width: 220px; padding: 5px; border: 1px solid rgba(255,255,255,.11); border-radius: 12px; background: #17191d; box-shadow: 0 18px 45px rgba(0,0,0,.42); }
 .model-option { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 10px; border: 0; border-radius: 8px; background: transparent; cursor: pointer; text-align: left; }

@@ -22,6 +22,7 @@ def _load_project_env() -> None:
 _load_project_env()
 
 from .engine import Engine, EngineResult
+from .execution import ExecutionTrace, TraceEvent, console_trace_sink
 from .llm import LLMPrimary, LLMSecondary, build_primary, build_secondary
 from .model import ModelRouter, ModelSelection, SecondaryRouter
 from .providers import FunctionPrimary, Primary, Secondary, Verifier
@@ -29,6 +30,7 @@ from .service import EngineRequest, EngineResponse, EngineService, create_defaul
 
 __all__ = [
     "Engine", "EngineResult", "EngineRequest", "EngineResponse", "EngineService",
+    "ExecutionTrace", "TraceEvent", "console_trace_sink",
     "FunctionPrimary", "LLMPrimary", "LLMSecondary", "ModelRouter", "ModelSelection",
     "Primary", "Secondary", "SecondaryRouter", "Verifier", "build_primary", "build_secondary",
     "create_default_service",

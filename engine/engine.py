@@ -10,6 +10,7 @@ from .revise.evaluator import evaluate
 from .revise.evidence import fuse_evidence
 from .revise.models import Decision, EvaluationProfile, EvaluationResult, Evidence, TaskContract, Version
 from .revise.profile import build_profile
+from .revise.verifiers import run_deterministic_verifiers
 
 
 TraceSink = Callable[[TraceEvent], None]
@@ -62,28 +63,12 @@ class Engine:
 
         self._emit(trace, "request", "received", mode=contract.mode.value)
         self._emit(trace, "contract", "created", requirements=len(contract.requirements), constraints=len(contract.constraints))
-        self._emit(
-            trace,
-            "profile",
-            "selected",
-            dimensions=", ".join(profile.dimensions),
-            effort=profile.evaluation_effort,
-            max_revisions=profile.max_revisions,
-            max_verification_steps=profile.max_verification_steps,
-        )
+        self._emit(trace, "profile", "selected", dimensions=", ".join(profile.dimensions), effort=profile.evaluation_effort, max_revisions=profile.max_revisions, max_verification_steps=profile.max_verification_steps)
 
         for revision_index in range(profile.max_revisions + 1):
             context = initial_context if previous is None else self._revision_context(previous)
             version_id = f"v{len(versions)}"
-            self._emit(
-                trace,
-                "primary",
-                "start",
-                provider=_provider_name(active_primary),
-                model=_model_name(active_primary),
-                version=version_id,
-                revision=revision_index,
-            )
+            self._emit(trace, "primary", "start", provider=_provider_name(active_primary), model=_model_name(active_primary), version=version_id, revision=revision_index)
             try:
                 response = active_primary.generate(contract, context=context)
             except Exception as exc:
@@ -92,20 +77,11 @@ class Engine:
             self._emit(trace, "primary", "complete", provider=_provider_name(active_primary), model=_model_name(active_primary), version=version_id)
 
             version = Version(version_id, response, parent_id=previous.id if previous else None)
-            result = self._evaluate(
-                contract,
-                response,
-                profile,
-                secondary=active_secondary,
-                evidence=supplied_evidence,
-                revisions_used=revision_index,
-                trace=trace,
-            )
+            result = self._evaluate(contract, response, profile, secondary=active_secondary, evidence=supplied_evidence, revisions_used=revision_index, trace=trace)
             version = Version(version.id, version.response, result, version.parent_id)
             versions.append(version)
 
             self._emit(trace, "decision", result.decision.value, version=version.id, score=result.overall_score, confidence=result.confidence)
-
             if result.decision in (Decision.ACCEPT, Decision.ASK):
                 final = self._best_version(versions)
                 self._emit(trace, "final", "selected", version=final.id if final else None, decision=result.decision.value)
@@ -117,17 +93,7 @@ class Engine:
         self._emit(trace, "final", "selected", version=final.id if final else None, decision=Decision.REVISE.value)
         return EngineResult(Decision.REVISE, final, tuple(versions), contract, profile, trace.snapshot())
 
-    def _evaluate(
-        self,
-        contract: TaskContract,
-        response: str,
-        profile: EvaluationProfile,
-        *,
-        secondary: Secondary | None,
-        evidence: Iterable[Evidence],
-        revisions_used: int,
-        trace: ExecutionTrace,
-    ) -> EvaluationResult:
+    def _evaluate(self, contract: TaskContract, response: str, profile: EvaluationProfile, *, secondary: Secondary | None, evidence: Iterable[Evidence], revisions_used: int, trace: ExecutionTrace) -> EvaluationResult:
         if secondary is not None:
             self._emit(trace, "secondary", "start", provider=_provider_name(secondary), model=_model_name(secondary))
         try:
@@ -143,21 +109,16 @@ class Engine:
 
         if secondary is not None:
             self._emit(trace, "secondary", "complete", provider=_provider_name(secondary), model=_model_name(secondary))
-
         for name, dimension in base.dimensions.items():
-            self._emit(
-                trace,
-                "evaluation",
-                "dimension",
-                name=name,
-                evaluation_status=dimension.status,
-                score=dimension.score,
-                confidence=dimension.confidence,
-            )
+            self._emit(trace, "evaluation", "dimension", name=name, evaluation_status=dimension.status, score=dimension.score, confidence=dimension.confidence)
         if base.issues:
             self._emit(trace, "evaluation", "issues", count=len(base.issues))
         if base.revision.instructions:
             self._emit(trace, "evaluation", "revision_guidance", count=len(base.revision.instructions))
+
+        deterministic_evidence = run_deterministic_verifiers(contract, response, profile)
+        if profile.deterministic_checks:
+            self._emit(trace, "verifier", "deterministic_complete", checks=",".join(profile.deterministic_checks), evidence=len(deterministic_evidence))
 
         verifier_evidence = ()
         if self.verifier is not None:
@@ -169,17 +130,8 @@ class Engine:
                 raise
             self._emit(trace, "verifier", "complete", verifier=type(self.verifier).__name__, evidence=len(verifier_evidence))
 
-        fused = fuse_evidence((*base.evidence, *evidence, *verifier_evidence))
-        result = EvaluationResult(
-            decision=base.decision,
-            overall_score=base.overall_score,
-            confidence=base.confidence,
-            dimensions=base.dimensions,
-            issues=base.issues,
-            evidence=fused.evidence,
-            revision=base.revision,
-            verification=base.verification,
-        )
+        fused = fuse_evidence((*base.evidence, *evidence, *deterministic_evidence, *verifier_evidence))
+        result = EvaluationResult(decision=base.decision, overall_score=base.overall_score, confidence=base.confidence, dimensions=base.dimensions, issues=base.issues, evidence=fused.evidence, revision=base.revision, verification=base.verification)
         return decide(contract, profile, result, revisions_used=revisions_used)
 
     def _emit(self, trace: ExecutionTrace, stage: str, event_status: str, **details: object) -> None:
@@ -199,11 +151,7 @@ class Engine:
         issues = tuple(issue.description for issue in evaluation.issues)
         if issues:
             parts.append("Issues:\n" + "\n".join(f"- {item}" for item in issues))
-        dimension_feedback = tuple(
-            f"- {name}: {dimension.status}; score={dimension.score}; confidence={dimension.confidence}; reason={dimension.reason}"
-            for name, dimension in evaluation.dimensions.items()
-            if dimension.status in {"fail", "partial"} or (dimension.score is not None and name in evaluation.dimensions)
-        )
+        dimension_feedback = tuple(f"- {name}: {dimension.status}; score={dimension.score}; confidence={dimension.confidence}; reason={dimension.reason}" for name, dimension in evaluation.dimensions.items() if dimension.status in {"fail", "partial"} or (dimension.score is not None and name in evaluation.dimensions))
         if dimension_feedback:
             parts.append("Dimension feedback:\n" + "\n".join(dimension_feedback))
         if evaluation.revision.instructions:

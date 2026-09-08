@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from .models import Decision, EvaluationProfile, EvaluationResult, Severity, TaskContract
+from .revision import RevisionAssessment
 
 
 def decide(
@@ -9,6 +10,7 @@ def decide(
     result: EvaluationResult,
     *,
     revisions_used: int,
+    revision_assessment: RevisionAssessment | None = None,
 ) -> EvaluationResult:
     if contract.missing_context:
         return _with_decision(result, Decision.ASK)
@@ -20,6 +22,13 @@ def decide(
         if issue.severity in {Severity.CRITICAL, Severity.MAJOR, Severity.MODERATE}
     ]
     if material:
+        return _next_action(result, profile, revisions_used)
+
+    # A revision must earn its place. Regressions are never accepted merely because
+    # the candidate clears the absolute quality thresholds.
+    if revision_assessment is not None and revision_assessment.status == "regressed":
+        return _next_action(result, profile, revisions_used)
+    if revision_assessment is not None and revision_assessment.status == "unchanged":
         return _next_action(result, profile, revisions_used)
 
     # Unknown evaluation is never treated as success.

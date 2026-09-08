@@ -167,6 +167,15 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(evidence[0].result, "fail")
         self.assertEqual(evidence[0].confidence, 1.0)
 
+    def test_arithmetic_verifier_handles_unicode_multiplication_and_direct_answer(self) -> None:
+        contract = TaskContract(goal="What is 25 × 17?", mode=Mode.BASIC)
+        profile = EvaluationProfile(dimensions=("mathematical_validity",), deterministic_checks=("arithmetic",))
+        good = run_deterministic_verifiers(contract, "425", profile)
+        bad = run_deterministic_verifiers(contract, "426", profile)
+        self.assertEqual(good[0].result, "pass")
+        self.assertEqual(bad[0].result, "fail")
+        self.assertEqual(good[0].confidence, 1.0)
+
     def test_python_verifier_never_executes_code(self) -> None:
         contract = TaskContract(goal="write Python code")
         profile = EvaluationProfile(dimensions=("code_correctness",), deterministic_checks=("python_syntax",))
@@ -184,8 +193,11 @@ class EngineTests(unittest.TestCase):
     def test_profile_selects_deterministic_checks(self) -> None:
         from engine.revise.profile import build_profile
         math = build_profile(TaskContract(goal="calculate 12 + 5"))
+        expression = build_profile(TaskContract(goal="What is 25 × 17?"))
         python = build_profile(TaskContract(goal="implement a Python function"))
         self.assertIn("arithmetic", math.deterministic_checks)
+        self.assertIn("arithmetic", expression.deterministic_checks)
+        self.assertIn("mathematical_validity", expression.dimensions)
         self.assertIn("python_syntax", python.deterministic_checks)
 
 

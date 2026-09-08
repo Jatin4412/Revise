@@ -4,7 +4,7 @@ import os
 from dataclasses import dataclass
 
 from .contracts import make_contract
-from .engine import Engine
+from .engine import Engine, EngineResult
 from .execution import console_trace_sink
 from .llm import build_primary, build_secondary
 from .model import ModelRouter, ModelSelection, SecondaryRouter
@@ -40,6 +40,29 @@ class EngineService:
         self.secondary_router = secondary_router
 
     def handle(self, request: EngineRequest) -> EngineResponse:
+        result = self._run(request)
+        version = result.final_version
+        return EngineResponse(version.response if version else "", result.decision, version.id if version else None)
+
+    def handle_payload(self, payload: dict[str, object]) -> dict[str, str | None]:
+        return self.handle(self._parse_request(payload)).to_dict()
+
+    def handle_trace_payload(self, payload: dict[str, object]) -> dict[str, object]:
+        """Return the normal result plus safe development trace metadata.
+
+        This is intentionally additive to the stable /v1/engine response. Trace events
+        contain execution state only; prompts, generated responses, credentials, and
+        other payload contents remain excluded by ExecutionTrace.
+        """
+        result = self._run(self._parse_request(payload))
+        response = self._response(result).to_dict()
+        response["trace"] = [
+            {"timestamp": event.timestamp, "stage": event.stage, "status": event.status, "details": dict(event.details)}
+            for event in result.trace
+        ]
+        return response
+
+    def _run(self, request: EngineRequest) -> EngineResult:
         prompt = request.prompt.strip()
         if not prompt:
             raise ValueError("prompt must not be empty")
@@ -50,11 +73,17 @@ class EngineService:
         secondary = self.secondary_router.resolve(secondary_selection) if self.secondary_router else None
         _annotate_model(primary, primary_selection)
         _annotate_model(secondary, secondary_selection)
-        result = self.engine.run(contract, primary=primary, secondary=secondary)
+        if primary is None:
+            raise ValueError("no primary model is configured")
+        return self.engine.run(contract, primary=primary, secondary=secondary)
+
+    @staticmethod
+    def _response(result: EngineResult) -> EngineResponse:
         version = result.final_version
         return EngineResponse(version.response if version else "", result.decision, version.id if version else None)
 
-    def handle_payload(self, payload: dict[str, object]) -> dict[str, str | None]:
+    @staticmethod
+    def _parse_request(payload: dict[str, object]) -> EngineRequest:
         prompt = payload.get("prompt")
         if not isinstance(prompt, str):
             raise ValueError("prompt must be a string")
@@ -65,7 +94,7 @@ class EngineService:
             raise ValueError(f"unsupported mode: {raw_mode}") from exc
         primary = _parse_model_selection(payload.get("primary_model")) or _parse_model_selection(payload.get("model"))
         secondary = _parse_model_selection(payload.get("secondary_model"))
-        return self.handle(EngineRequest(prompt=prompt, mode=mode, primary_model=primary, secondary_model=secondary)).to_dict()
+        return EngineRequest(prompt=prompt, mode=mode, primary_model=primary, secondary_model=secondary)
 
 
 def create_default_service() -> EngineService:

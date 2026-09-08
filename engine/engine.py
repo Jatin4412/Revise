@@ -10,6 +10,7 @@ from .revise.evaluator import evaluate
 from .revise.evidence import fuse_evidence
 from .revise.models import Decision, EvaluationProfile, EvaluationResult, Evidence, TaskContract, Version
 from .revise.profile import build_profile
+from .revise.revision import RevisionAssessment, assess_revision
 from .revise.verifiers import run_deterministic_verifiers
 
 
@@ -77,8 +78,18 @@ class Engine:
             self._emit(trace, "primary", "complete", provider=_provider_name(active_primary), model=_model_name(active_primary), version=version_id)
 
             version = Version(version_id, response, parent_id=previous.id if previous else None)
-            result = self._evaluate(contract, response, profile, secondary=active_secondary, evidence=supplied_evidence, revisions_used=revision_index, trace=trace)
-            version = Version(version.id, version.response, result, version.parent_id)
+            result, revision_assessment = self._evaluate(
+                contract,
+                response,
+                profile,
+                secondary=active_secondary,
+                evidence=supplied_evidence,
+                revisions_used=revision_index,
+                baseline=previous.evaluation if previous else None,
+                trace=trace,
+            )
+            metadata = {"revision_assessment": revision_assessment} if revision_assessment is not None else {}
+            version = Version(version.id, version.response, result, version.parent_id, metadata)
             versions.append(version)
 
             self._emit(trace, "decision", result.decision.value, version=version.id, score=result.overall_score, confidence=result.confidence)
@@ -93,7 +104,18 @@ class Engine:
         self._emit(trace, "final", "selected", version=final.id if final else None, decision=Decision.REVISE.value)
         return EngineResult(Decision.REVISE, final, tuple(versions), contract, profile, trace.snapshot())
 
-    def _evaluate(self, contract: TaskContract, response: str, profile: EvaluationProfile, *, secondary: Secondary | None, evidence: Iterable[Evidence], revisions_used: int, trace: ExecutionTrace) -> EvaluationResult:
+    def _evaluate(
+        self,
+        contract: TaskContract,
+        response: str,
+        profile: EvaluationProfile,
+        *,
+        secondary: Secondary | None,
+        evidence: Iterable[Evidence],
+        revisions_used: int,
+        baseline: EvaluationResult | None,
+        trace: ExecutionTrace,
+    ) -> tuple[EvaluationResult, RevisionAssessment | None]:
         if secondary is not None:
             self._emit(trace, "secondary", "start", provider=_provider_name(secondary), model=_model_name(secondary))
         try:
@@ -131,8 +153,37 @@ class Engine:
             self._emit(trace, "verifier", "complete", verifier=type(self.verifier).__name__, evidence=len(verifier_evidence))
 
         fused = fuse_evidence((*base.evidence, *evidence, *deterministic_evidence, *verifier_evidence))
-        result = EvaluationResult(decision=base.decision, overall_score=base.overall_score, confidence=base.confidence, dimensions=base.dimensions, issues=base.issues, evidence=fused.evidence, revision=base.revision, verification=base.verification)
-        return decide(contract, profile, result, revisions_used=revisions_used)
+        result = EvaluationResult(
+            decision=base.decision,
+            overall_score=base.overall_score,
+            confidence=base.confidence,
+            dimensions=base.dimensions,
+            issues=base.issues,
+            evidence=fused.evidence,
+            revision=base.revision,
+            verification=base.verification,
+        )
+        revision_assessment = assess_revision(baseline, result)
+        if revision_assessment is not None:
+            self._emit(
+                trace,
+                "revision",
+                "assessed",
+                status=revision_assessment.status,
+                score_delta=revision_assessment.score_delta,
+                resolved_issues=len(revision_assessment.resolved_issues),
+                introduced_issues=len(revision_assessment.introduced_issues),
+                improved_dimensions=len(revision_assessment.improved_dimensions),
+                regressed_dimensions=len(revision_assessment.regressed_dimensions),
+            )
+        result = decide(
+            contract,
+            profile,
+            result,
+            revisions_used=revisions_used,
+            revision_assessment=revision_assessment,
+        )
+        return result, revision_assessment
 
     def _emit(self, trace: ExecutionTrace, stage: str, event_status: str, **details: object) -> None:
         event = trace.record(stage, event_status, **details)

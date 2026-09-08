@@ -50,13 +50,25 @@ class RevisionAdversarialEdgeTests(unittest.TestCase):
         self.assertEqual(len(assessment.resolved_issues), 1)
         self.assertEqual(len(assessment.introduced_issues), 1)
 
-    def test_missing_dimension_is_not_falsely_counted_as_improvement(self) -> None:
+    def test_missing_dimension_is_a_regression_even_when_overall_score_rises(self) -> None:
         baseline = evaluation(0.80, dimensions={"correctness": 0.80, "clarity": 0.80})
         revised = evaluation(0.85, dimensions={"correctness": 0.85})
         assessment = assess_revision(baseline, revised)
-        self.assertEqual(assessment.status, "improved")
+        self.assertEqual(assessment.status, "regressed")
         self.assertEqual(assessment.improved_dimensions, ("correctness",))
-        self.assertEqual(assessment.regressed_dimensions, ())
+        self.assertEqual(assessment.regressed_dimensions, ("clarity",))
+
+    def test_issue_identity_ignores_case_and_whitespace_differences(self) -> None:
+        issue_before = Issue(" Accuracy ", Severity.MAJOR, "wrong   claim", " paragraph   2 ")
+        issue_after = Issue("accuracy", Severity.MINOR, "WRONG claim", "paragraph 2")
+        assessment = assess_revision(
+            evaluation(0.80, issues=(issue_before,)),
+            evaluation(0.80, issues=(issue_after,)),
+        )
+        self.assertEqual(assessment.resolved_issues, ())
+        self.assertEqual(assessment.introduced_issues, ())
+        self.assertEqual(len(assessment.downgraded_issues), 1)
+        self.assertEqual(assessment.status, "improved")
 
 
 if __name__ == "__main__":

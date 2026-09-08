@@ -6,7 +6,7 @@ import socket
 from dataclasses import dataclass
 from typing import Protocol
 from urllib import error, request
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 from .models import Evidence, EvaluationProfile, TaskContract
 
@@ -19,6 +19,13 @@ class SourceFetcher(Protocol):
         """Return HTTP status, final URL, and content type."""
 
 
+class _SafeRedirectHandler(request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        target = urljoin(req.full_url, newurl)
+        _validate_public_url(target)
+        return super().redirect_request(req, fp, code, msg, headers, target)
+
+
 @dataclass(frozen=True)
 class HttpSourceFetcher:
     user_agent: str = "ReviseEngine/0.1"
@@ -26,11 +33,14 @@ class HttpSourceFetcher:
     def fetch(self, url: str, *, timeout: float, max_bytes: int) -> tuple[int, str, str]:
         parsed = _validate_public_url(url)
         req = request.Request(url, headers={"User-Agent": self.user_agent}, method="GET")
+        opener = request.build_opener(_SafeRedirectHandler())
         try:
-            with request.urlopen(req, timeout=timeout) as response:
+            with opener.open(req, timeout=timeout) as response:
                 response.read(max_bytes)
                 content_type = response.headers.get("Content-Type", "")
-                return int(response.status), response.geturl(), content_type
+                final_url = response.geturl()
+                _validate_public_url(final_url)
+                return int(response.status), final_url, content_type
         except error.HTTPError as exc:
             return int(exc.code), exc.geturl() or parsed.geturl(), exc.headers.get("Content-Type", "") if exc.headers else ""
         except error.URLError as exc:
@@ -104,8 +114,8 @@ def _requires_citations(contract: TaskContract) -> bool:
 
 def _validate_public_url(url: str):
     parsed = urlparse(url)
-    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
-        raise ValueError("only HTTP(S) URLs with a hostname are supported")
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password:
+        raise ValueError("only public HTTP(S) URLs without embedded credentials are supported")
     hostname = parsed.hostname
     try:
         addresses = {item[4][0] for item in socket.getaddrinfo(hostname, None, type=socket.SOCK_STREAM)}

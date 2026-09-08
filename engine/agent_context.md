@@ -37,22 +37,33 @@ User -> Task Contract -> Mode/Profile -> Model Router -> Primary
 ## Current implementation
 - Task contracts/state, modes, adaptive evaluation profiles, evidence fusion, decision engine, bounded revision loop, versioning, and best-version selection exist.
 - Provider-neutral Primary/Secondary/Verifier protocols exist.
-- Runtime adapters exist for Gemini, OpenAI, Grok, and Ollama.
+- Runtime adapters currently support Gemini, Groq, OpenRouter, OpenAI, and Grok.
+- Ollama is intentionally not part of the current testing/selector setup.
 - Structured Secondary evaluation exists.
 - HTTP boundary is stable: `GET /health`, `POST /v1/engine`, success `{text, decision, version_id}`, generic error `{error:{code,message}}`.
 - Phase A execution observability is complete: structured trace records request, contract/profile, Primary, Secondary, per-dimension evaluation, verifier, decision, revisions, and final selection. Trace excludes prompts, responses, and credentials. Console trace is enabled for the local default service.
-- Local end-to-end runtime has been verified for the basic `2+2` request.
+- Local end-to-end runtime has been verified for Gemini 3.1 Flash-Lite and OpenRouter Free. Gemini 3.7 Flash returned a provider-side 503 high-demand response during testing. Groq GPT-OSS 120B returned HTTP 403 with Cloudflare error code 1010 during testing.
 
 ## Current model/runtime policy
 - Default Primary: `gemini / gemini-3.7-flash`.
 - Default Secondary: `gemini / gemini-3.1-flash-lite`.
-- These are chosen because Google's current Gemini API pricing lists free-tier input/output for both models.
-- Previous defaults `gemini-3.8-flash` and `gemini-3.5-flash-lite` are removed from engine defaults because they are not the current documented free-tier model IDs.
-- Ollama remains an optional no-API-key local path. `.env.example` documents `gemma4:e4b` as an optional Primary and `qwen3:4b` as an optional Secondary.
-- Grok and OpenAI adapters remain supported for users who have paid API access, but they are not presented as free choices.
+- Current free testing lineup: Gemini 3.7 Flash, Gemini 3.1 Flash-Lite, Groq GPT-OSS 120B, and OpenRouter Free.
+- Groq uses the official OpenAI-compatible Chat Completions endpoint with `openai/gpt-oss-120b`.
+- OpenRouter uses the OpenAI-compatible Chat Completions endpoint with `openrouter/free`.
+- Grok and OpenAI adapters remain supported for users with paid API access but are not presented as free choices.
+
+## Current provider diagnosis
+- Groq's official documentation confirms `https://api.groq.com/openai/v1/chat/completions` and `openai/gpt-oss-120b` are valid. The observed 403/1010 is therefore not explained by an invalid endpoint or model ID.
+- The Groq adapter now sends an explicit `User-Agent: ReviseEngine/0.1` on OpenAI-compatible requests. This is a small compatibility change aimed at the observed Cloudflare edge rejection; it does not alter core engine behavior.
+- A unit test covers the Groq request endpoint, authorization header, client identity, and timeout. The real API key/network path still needs a local runtime retest after updating the repo.
 
 ## Current known limitations / next roadmap
-### Phase B — Strengthen evaluation (next)
+### Provider testing (current)
+- Retest Groq after pulling the latest engine commit.
+- If Groq still returns 403/1010, treat it as an environment/network/edge restriction rather than changing core evaluation behavior; compare with a direct curl request using the same key.
+- Run a small consistent prompt matrix across Gemini 3.1 Flash-Lite and OpenRouter Free before Phase B.
+
+### Phase B — Strengthen evaluation (next after provider testing)
 - Make profiles drive rigorous task-specific checks.
 - Add explicit quality thresholds/hard gates where justified.
 - Weight dimensions by task needs.
@@ -81,9 +92,9 @@ Expose trace/status through an additive development interface for the UI agent. 
 7. If an approach cycles or fails repeatedly, stop and reassess instead of retrying blindly.
 
 ## UI handoff for current model changes
-The UI agent owns `web/`. For the model selector, use real runtime selections rather than display-only names:
+The UI agent owns `web/`. For the current test selector, use these runtime selections:
 - Gemini 3.7 Flash: `{provider:"gemini", model:"gemini-3.7-flash"}`
 - Gemini 3.1 Flash-Lite: `{provider:"gemini", model:"gemini-3.1-flash-lite"}`
-- Optional local Ollama Gemma 4 E4B: `{provider:"ollama", model:"gemma4:e4b"}`
-- Optional local Ollama Qwen 3 4B: `{provider:"ollama", model:"qwen3:4b"}`
-Do not label Grok/OpenAI as free API options.
+- GPT-OSS 120B (Groq): `{provider:"groq", model:"openai/gpt-oss-120b"}`
+- OpenRouter Free: `{provider:"openrouter", model:"openrouter/free"}`
+Do not label Grok/OpenAI as free API options. Do not surface Ollama in the current selector.

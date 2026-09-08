@@ -150,7 +150,7 @@ class Engine:
                 "evaluation",
                 "dimension",
                 name=name,
-                status=dimension.status,
+                evaluation_status=dimension.status,
                 score=dimension.score,
                 confidence=dimension.confidence,
             )
@@ -188,7 +188,6 @@ class Engine:
             try:
                 self.trace_sink(event)
             except Exception:
-                # Observability must never change engine correctness.
                 pass
 
     @staticmethod

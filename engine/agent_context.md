@@ -50,6 +50,7 @@ User -> Task Contract -> Mode/Profile -> Model Router -> Primary
 - Revision issue identity is stable across severity changes using issue type, location, and normalized description. Severity changes are tracked separately as downgraded or escalated issues; escalations are regressions and downgrades count as improvement signals.
 - Phase D decision policy rejects unchanged or regressed revisions, while allowing revisions with a genuine score/dimension improvement or relevant issue resolution. Material introduced issues and dimension regressions are treated as regressions. The best valid prior version remains selectable when a later revision is rejected.
 - Revision assessment is stored in `Version.metadata` and summarized in the development trace; response payloads remain excluded from trace details.
+- Deterministic evidence precedence is now enforced in `engine/revise/decision.py`: a deterministic `fail` blocks acceptance regardless of a confident LLM/model `pass`, causing `REVISE` while budget remains and `ASK` when exhausted.
 
 ## Current model/runtime policy
 - Default Primary: `gemini / gemini-3.7-flash`.
@@ -80,26 +81,26 @@ User -> Task Contract -> Mode/Profile -> Model Router -> Primary
 - Math-like tasks can select arithmetic consistency verification.
 - Python tasks can select AST syntax verification without executing generated code.
 - JSON-formatted tasks can select JSON syntax verification.
-- Deterministic evidence is fused with Secondary/custom verifier evidence and therefore participates in the existing evidence-precedence model.
+- Deterministic evidence is fused with Secondary/custom verifier evidence and participates in the existing evidence-precedence model.
+- Decision policy now explicitly enforces deterministic-failure precedence after evidence fusion.
 - Trace records deterministic verifier completion without storing candidate response payloads.
-- Regression tests cover wrong arithmetic, direct numeric answers for Unicode multiplication expressions, Python syntax checking, JSON syntax checking, and profile selection for explicit arithmetic expressions.
+- Regression tests cover wrong arithmetic, direct numeric answers for Unicode multiplication expressions, Python syntax checking, JSON syntax checking, profile selection for explicit arithmetic expressions, and deterministic failure overriding a confident model pass.
 - Safe runtime code tests, richer schema validation, citation/source verification, and broader external evidence remain follow-up work rather than being faked as complete.
 
 ## Phase D — Revision quality (implemented)
 - Added `RevisionAssessment` and `assess_revision()` as a provider-neutral comparison layer.
-- Tracks baseline/revised score, score delta/net improvement, resolved issues, introduced issues, improved dimensions, regressed dimensions, and status (`improved`, `regressed`, `unchanged`).
+- Tracks baseline/revised score, score delta/net improvement, resolved issues, introduced issues, improved dimensions, regressed dimensions, severity downgrades/escalations, and status (`improved`, `regressed`, `unchanged`).
 - A revision with unchanged quality cannot be accepted solely because it crosses an absolute threshold.
 - Regressions cannot be accepted; the bounded loop continues if budget remains and otherwise returns `ASK`, with best-version selection preserving the stronger valid candidate.
 - A revision with no score increase can still qualify as improved when it resolves a relevant prior issue or improves a dimension.
 - Issue identity is preserved across severity changes; severity downgrades and escalations are explicitly assessed rather than being misclassified as issue removal/introduction.
-- Adversarial tests now cover severity changes, severity escalation despite a higher overall score, dimension tradeoffs where a core dimension regresses, repeated revisions using the immediate previous baseline, and preservation of the stronger prior candidate after a regression.
+- Adversarial tests cover severity changes, severity escalation despite a higher overall score, dimension tradeoffs where a core dimension regresses, repeated revisions using the immediate previous baseline, and preservation of the stronger prior candidate after a regression.
 
 ## Current roadmap
 ### Phase C follow-up
 - Add richer schema validation when the task contract can carry an explicit schema.
 - Add safe, sandboxed code tests/compiler checks where infrastructure permits.
 - Add citation/source verification and other external evidence adapters.
-- Strengthen deterministic evidence precedence with adversarial tests where Secondary incorrectly passes a deterministically failing candidate.
 
 ### Phase D follow-up
 - Continue adversarial/corner-case testing around multi-issue interactions, missing dimensions, score ties, and mixed improvements/regressions.

@@ -53,10 +53,15 @@ User -> Task Contract -> Mode/Profile -> Model Router -> Primary
 - Phase D decision policy rejects unchanged or regressed revisions, while allowing revisions with a genuine score/dimension improvement or relevant issue resolution. Material introduced issues and dimension regressions are treated as regressions. The best valid prior version remains selectable when a later revision is rejected.
 - Revision assessment is stored in `Version.metadata` and summarized in the development trace; response payloads remain excluded from trace details.
 - Phase E service compatibility was hardened so the application boundary does not assume concrete `Engine` internals when used with injected or lightweight engine implementations.
-- EvaluationProfile now validates its policy structure at construction: non-empty unique dimensions, valid required-dimension references, valid weight/floor references, finite bounded thresholds, supported effort values, non-negative integer budgets, and non-empty policy selectors.
-- Profile construction now considers the full task-contract text relevant to evaluation selection, including desired format/length/style, assumptions, success criteria, and verification requirements.
-- Configured hard-gate issue types are now enforced by the decision layer before ordinary severity/score acceptance checks.
-- Configured deterministic verifiers now fail closed when a requested verifier is missing from the registry instead of silently skipping verification.
+- EvaluationProfile validates its policy structure at construction: non-empty unique dimensions, valid required-dimension references, finite bounded thresholds, supported effort values, non-negative integer budgets, and non-empty policy selectors.
+- Profile construction considers the full task-contract text relevant to evaluation selection, including desired format/length/style, assumptions, success criteria, and verification requirements.
+- Configured hard-gate issue types are enforced by the decision layer before ordinary severity/score acceptance checks.
+- Configured deterministic and external verifiers fail closed when a requested verifier is missing from the registry instead of silently skipping verification.
+- `max_verification_steps` is now an actual execution budget: configured deterministic/external verifier steps beyond the budget produce explicit failing evidence rather than silently disappearing. Source-count limits remain separate from verifier-step limits.
+- `evidence_requirements` now participate in acceptance: every configured requirement must match a passing evidence item.
+- Evaluator results are validated before evidence fusion/decision. Missing dimensions, invalid statuses, non-finite/out-of-range scores or confidence, and unexpected dimensions become a fail-closed unknown/ASK state.
+- `stopping_conditions` supports `stop_on_no_improvement`, which terminates further revision when the latest revision does not demonstrate improvement; unsupported stopping conditions are rejected at profile construction.
+- Best-version selection excludes revisions marked `regressed` or `unchanged`, preventing a rejected revision from displacing a stronger prior candidate.
 
 ## Current model/runtime policy
 - Default Primary: `gemini / gemini-3.7-flash`.
@@ -93,7 +98,7 @@ User -> Task Contract -> Mode/Profile -> Model Router -> Primary
 - Added bounded external source verification for cited HTTP(S) URLs. It is reachability verification, not claim-truth verification, and is isolated behind a provider-neutral fetcher/verifier boundary.
 - External source verification is selected for research/source/citation/factual tasks, while semantic groundedness/evidence quality remain separate model dimensions.
 - External source failures are handled as non-passing evidence and cannot be overridden by model acceptance.
-- Tests cover Python compiler behavior, non-execution, source reachability, unavailable sources, required citations, source bounds/deduplication, fetch errors, registry execution, and profile selection.
+- Tests cover Python compiler behavior, non-execution, source reachability, unavailable sources, required citations, source bounds/deduplication, fetch errors, registry execution, profile selection, and verifier budgets.
 - Safe runtime code tests beyond compile-only verification remain deferred until genuine sandbox infrastructure exists.
 - Broader external evidence adapters remain follow-up work; do not fake semantic claim verification.
 
@@ -105,7 +110,7 @@ User -> Task Contract -> Mode/Profile -> Model Router -> Primary
 - A revision with no score increase can still qualify as improved when it resolves a relevant prior issue or improves a dimension.
 - Issue identity is preserved across severity changes; severity downgrades and escalations are explicitly assessed rather than being misclassified as issue removal/introduction.
 - Adversarial tests cover severity changes, severity escalation despite a higher overall score, dimension tradeoffs where a core dimension regresses, repeated revisions using the immediate previous baseline, and preservation of the stronger prior candidate after a regression.
-- Policy-contract tests validate that profile dimensions, thresholds, weights, required dimensions, selectors, and execution budgets are internally coherent before runtime.
+- Policy-contract and stabilization tests validate profile structure, evidence requirements, verifier budgets, malformed evaluator outputs, stopping behavior, hard gates, and best-version invariants.
 
 ## Phase E — Development trace exposure (implemented baseline)
 - Added `POST /v1/engine/trace` as an additive development interface.
@@ -115,11 +120,14 @@ User -> Task Contract -> Mode/Profile -> Model Router -> Primary
 - Future work can add authenticated/protected development access or richer status views without coupling the core engine to UI concerns.
 
 ## Foundation stabilization — current phase
-- Policy objects now fail closed when structurally invalid.
+- Policy objects fail closed when structurally invalid.
 - Hard-gate policy is enforced by the decision layer rather than being decorative configuration.
-- Missing configured deterministic verifiers fail closed rather than disappearing from the evaluation path.
-- Profile detection uses the complete contract fields relevant to selecting task-specific checks.
-- Remaining stabilization work is adversarial testing of verification-budget semantics, evidence requirements/stopping conditions, evaluation-result validity, and best-version invariants.
+- Missing configured deterministic/external verifiers fail closed rather than disappearing from the evaluation path.
+- Verification budgets now have runtime semantics.
+- Evidence requirements now affect acceptance.
+- Evaluator result validation now fails closed.
+- `stop_on_no_improvement` and best-version invariants are implemented.
+- Remaining stabilization work is test execution against the complete current suite and then any failures/corner cases discovered there.
 
 ## Roadmap after stabilization
 ### Phase C follow-up

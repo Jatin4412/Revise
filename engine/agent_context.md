@@ -44,6 +44,7 @@ User -> Task Contract -> Mode/Profile -> Model Router -> Primary
 - Phase A execution observability is complete: structured trace records request, contract/profile, Primary, Secondary, per-dimension evaluation, verifier, decision, revisions, and final selection. Trace excludes prompts, responses, and credentials. Console trace is enabled for the local default service.
 - Local end-to-end runtime has been verified for Gemini 3.1 Flash-Lite, OpenRouter Free, Groq GPT-OSS 120B, and Gemini 3.7 Flash after retry.
 - Phase C deterministic verification primitives now exist in `engine/revise/verifiers.py`: arithmetic consistency checks, Python AST syntax checks without execution, and JSON syntax checks. Profiles select only relevant deterministic checks, and the engine fuses their evidence with Secondary/custom verifier evidence before decision policy.
+- Arithmetic task detection now also recognizes explicit numeric expressions using ASCII or Unicode operators such as `25 × 17`, and the arithmetic verifier can compare a direct numeric answer against a single arithmetic expression in the task.
 - Phase C deliberately does not execute arbitrary generated code; safe compiler/test execution remains a future bounded verifier capability.
 
 ## Current model/runtime policy
@@ -77,7 +78,7 @@ User -> Task Contract -> Mode/Profile -> Model Router -> Primary
 - JSON-formatted tasks can select JSON syntax verification.
 - Deterministic evidence is fused with Secondary/custom verifier evidence and therefore participates in the existing evidence-precedence model.
 - Trace records deterministic verifier completion without storing candidate response payloads.
-- Regression tests cover wrong arithmetic, Python syntax checking, JSON syntax checking, and profile selection.
+- Regression tests cover wrong arithmetic, direct numeric answers for Unicode multiplication expressions, Python syntax checking, JSON syntax checking, and profile selection for explicit arithmetic expressions.
 - Safe runtime code tests, richer schema validation, citation/source verification, and broader external evidence remain follow-up work rather than being faked as complete.
 
 ## Current roadmap

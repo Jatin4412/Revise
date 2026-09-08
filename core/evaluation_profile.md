@@ -8,6 +8,12 @@ An Evaluation Profile defines the smallest useful evaluation plan for a task.
 - Define hard gates, deterministic checks, external verification, and model-based evaluators.
 - Set evaluation effort, verification budget, revision budget, and stopping conditions.
 
+## Deterministic schema verification
+
+When a Task Contract carries an explicit `output_schema`, the profile selects the deterministic `json_schema` check. This preserves the user's explicit structured-output requirement while keeping verification bounded and provider-neutral.
+
+The schema verifier is preferred over model judgment for directly verifiable structural properties, but it does not replace semantic evaluation by the Secondary.
+
 ## Principles
 
 - Do not run every possible evaluator on every task.

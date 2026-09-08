@@ -62,6 +62,7 @@ User -> Task Contract -> Mode/Profile -> Model Router -> Primary
 - Evaluator results are validated before evidence fusion/decision. Missing dimensions, invalid statuses, non-finite/out-of-range scores or confidence, and unexpected dimensions become a fail-closed unknown/ASK state.
 - `stopping_conditions` supports `stop_on_no_improvement`, which terminates further revision when the latest revision does not demonstrate improvement; unsupported stopping conditions are rejected at profile construction.
 - Best-version selection excludes revisions marked `regressed` or `unchanged`, preventing a rejected revision from displacing a stronger prior candidate.
+- Latest stabilization work fixes required-dimension uniqueness validation and external verifier registry semantics; external source-limit regression coverage now explicitly distinguishes deduplication from source-count overflow.
 
 ## Current model/runtime policy
 - Default Primary: `gemini / gemini-3.7-flash`.
@@ -127,7 +128,7 @@ User -> Task Contract -> Mode/Profile -> Model Router -> Primary
 - Evidence requirements now affect acceptance.
 - Evaluator result validation now fails closed.
 - `stop_on_no_improvement` and best-version invariants are implemented.
-- Remaining stabilization work is test execution against the complete current suite and then any failures/corner cases discovered there.
+- Stabilization regression fixes are now present on the working branch; local execution remains the final confirmation point before merging to `main`.
 
 ## Roadmap after stabilization
 ### Phase C follow-up

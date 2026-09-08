@@ -71,10 +71,10 @@ class EvaluationProfile:
         required_set = set(self.required_dimensions)
         if len(required_set) != len(self.required_dimensions):
             raise ValueError("required dimensions must be unique")
-        if any(name not in dimension_set for name in self.required_dimensions):
-            raise ValueError("required dimensions must be present in dimensions")
         if any(not isinstance(name, str) or not name.strip() for name in self.required_dimensions):
             raise ValueError("required dimensions must be non-empty strings")
+        if any(name not in dimension_set for name in self.required_dimensions):
+            raise ValueError("required dimensions must be present in dimensions")
         if any(name not in dimension_set for name in self.dimension_weights):
             raise ValueError("dimension weights must reference configured dimensions")
         if any(name not in dimension_set for name in self.minimum_scores):

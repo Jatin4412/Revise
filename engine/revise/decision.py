@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .models import Decision, EvaluationProfile, EvaluationResult, Severity, TaskContract
+from .models import Decision, EvaluationProfile, EvaluationResult, Evidence, Severity, TaskContract
 from .revision import RevisionAssessment
 
 
@@ -15,57 +15,41 @@ def decide(
     if contract.missing_context:
         return _with_decision(result, Decision.ASK)
 
-    # Configured hard gates are authoritative. A matching issue blocks acceptance
-    # regardless of its model-assigned severity or overall score.
-    if any(issue.type in profile.hard_gates for issue in result.issues):
-        return _next_action(result, profile, revisions_used)
-
-    # Critical/major/moderate issues remain material failures even when no explicit
-    # hard-gate selector was configured.
-    material = [
-        issue
-        for issue in result.issues
-        if issue.severity in {Severity.CRITICAL, Severity.MAJOR, Severity.MODERATE}
-    ]
+    material = [issue for issue in result.issues if issue.severity in {Severity.CRITICAL, Severity.MAJOR, Severity.MODERATE}]
     if material:
         return _next_action(result, profile, revisions_used)
 
-    # Direct deterministic failures outrank model evaluation. A model PASS cannot
-    # override a deterministic verifier that proves the candidate is invalid.
-    if any(e.method == "deterministic" and e.result == "fail" for e in result.evidence):
+    # Explicit hard-gate policy outranks model severity and quality scores.
+    if any(issue.type in profile.hard_gates for issue in result.issues):
         return _next_action(result, profile, revisions_used)
 
-    # Required external source checks also outrank model acceptance. A source
-    # verification failure means the candidate cannot claim a verified citation.
+    if any(e.method == "deterministic" and e.result == "fail" for e in result.evidence):
+        return _next_action(result, profile, revisions_used)
     if any(e.method == "external" and e.result == "fail" for e in result.evidence):
         return _next_action(result, profile, revisions_used)
 
-    # A revision must earn its place. Regressions are never accepted merely because
-    # the candidate clears the absolute quality thresholds.
+    # Every configured evidence requirement must have a passing evidence item.
+    unmet = [requirement for requirement in profile.evidence_requirements if not _evidence_requirement_met(requirement, result.evidence)]
+    if unmet:
+        return _next_action(result, profile, revisions_used)
+
     if revision_assessment is not None and revision_assessment.status == "regressed":
         return _next_action(result, profile, revisions_used)
     if revision_assessment is not None and revision_assessment.status == "unchanged":
         return _next_action(result, profile, revisions_used)
 
-    # Unknown evaluation is never treated as success.
     if any(d.status == "unknown" for d in result.dimensions.values()):
         return _with_decision(result, Decision.ASK)
-
-    # Any partial/failing dimension needs another pass. This prevents a high average
-    # score from hiding a meaningful weakness.
     if any(d.status in {"fail", "partial"} for d in result.dimensions.values()):
         return _next_action(result, profile, revisions_used)
 
-    # Required dimensions have individual floors in addition to the overall score.
     for name in profile.required_dimensions:
         dimension = result.dimensions.get(name)
         if dimension is None or dimension.score is None:
             return _with_decision(result, Decision.ASK)
-        minimum = profile.minimum_scores.get(name, 0.70)
-        if dimension.score < minimum:
+        if dimension.score < profile.minimum_scores.get(name, 0.70):
             return _next_action(result, profile, revisions_used)
 
-    # Optional dimensions can also block acceptance when their configured floor is missed.
     for name, minimum in profile.minimum_scores.items():
         dimension = result.dimensions.get(name)
         if dimension is not None and dimension.score is not None and dimension.score < minimum:
@@ -73,13 +57,25 @@ def decide(
 
     if result.confidence < profile.minimum_confidence:
         return _with_decision(result, Decision.ASK)
-
     if result.overall_score is None:
         return _with_decision(result, Decision.ASK)
     if result.overall_score < profile.minimum_overall_score:
         return _next_action(result, profile, revisions_used)
 
     return _with_decision(result, Decision.ACCEPT)
+
+
+def _evidence_requirement_met(requirement: str, evidence: tuple[Evidence, ...]) -> bool:
+    target = requirement.strip().lower()
+    if not target:
+        return False
+    for item in evidence:
+        if item.result != "pass":
+            continue
+        haystack = " ".join((item.source, item.method, *item.provenance)).lower()
+        if target == item.method.lower() or target == item.source.lower() or target in haystack:
+            return True
+    return False
 
 
 def _next_action(result: EvaluationResult, profile: EvaluationProfile, revisions_used: int) -> EvaluationResult:
@@ -89,13 +85,4 @@ def _next_action(result: EvaluationResult, profile: EvaluationProfile, revisions
 
 
 def _with_decision(result: EvaluationResult, decision: Decision) -> EvaluationResult:
-    return EvaluationResult(
-        decision=decision,
-        overall_score=result.overall_score,
-        confidence=result.confidence,
-        dimensions=result.dimensions,
-        issues=result.issues,
-        evidence=result.evidence,
-        revision=result.revision,
-        verification=result.verification,
-    )
+    return EvaluationResult(decision, result.overall_score, result.confidence, result.dimensions, result.issues, result.evidence, result.revision, result.verification)

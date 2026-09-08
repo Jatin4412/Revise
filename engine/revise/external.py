@@ -79,7 +79,7 @@ class SourceVerifier:
 
 
 def run_external_verifiers(contract: TaskContract, response: str, profile: EvaluationProfile, *, registry: dict[str, SourceVerifier] | None = None, max_steps: int | None = None) -> tuple[Evidence, ...]:
-    selected = registry or {"source_verification": SourceVerifier()}
+    selected = {"source_verification": SourceVerifier()} if registry is None else registry
     names = tuple(profile.external_verification)
     budget = profile.max_verification_steps if max_steps is None else max(0, max_steps)
     evidence: list[Evidence] = []
@@ -96,6 +96,7 @@ def run_external_verifiers(contract: TaskContract, response: str, profile: Evalu
 
 
 def _extract_urls(response: str) -> tuple[str, ...]:
+    # Preserve first-seen URL order and deduplicate repeated citations.
     found: list[str] = []
     for raw in _URL_RE.findall(response):
         url = raw.rstrip(".,;:!?)]}")

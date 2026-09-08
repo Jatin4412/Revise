@@ -40,8 +40,9 @@ User -> Task Contract -> Mode/Profile -> Model Router -> Primary
 - Provider-neutral Primary/Secondary/Verifier protocols exist.
 - Runtime adapters currently support Gemini, Groq, OpenRouter, OpenAI, and Grok; Ollama remains intentionally outside the current selector/testing setup.
 - Structured Secondary evaluation exists.
-- HTTP boundary is stable: `GET /health`, `POST /v1/engine`, success `{text, decision, version_id}`, generic error `{error:{code,message}}`.
+- HTTP boundary remains stable: `GET /health`, `POST /v1/engine`, success `{text, decision, version_id}`, generic error `{error:{code,message}}`.
 - Phase A execution observability is complete: structured trace records request, contract/profile, Primary, Secondary, per-dimension evaluation, verifier, decision, revisions, and final selection. Trace excludes prompts, responses, and credentials. Console trace is enabled for the local default service.
+- Phase E adds an additive development-only response path at `POST /v1/engine/trace`. It returns the normal `{text, decision, version_id}` plus serialized safe trace events; the existing `/v1/engine` response is unchanged.
 - Local end-to-end runtime has been verified for Gemini 3.1 Flash-Lite, OpenRouter Free, Groq GPT-OSS 120B, and Gemini 3.7 Flash after retry.
 - Phase C deterministic verification includes arithmetic consistency, Python AST syntax checking, Python compile-only checking, JSON syntax, and explicit JSON schema validation. Generated Python is never executed.
 - Richer JSON schema validation supports primitive/object/array types, required properties, nested properties/items, additional-property control, enum/const, string length/pattern constraints, numeric minimum/maximum, array size/uniqueness constraints, and local `#/...` references. Unsupported or malformed schemas fail closed.
@@ -100,6 +101,13 @@ User -> Task Contract -> Mode/Profile -> Model Router -> Primary
 - Issue identity is preserved across severity changes; severity downgrades and escalations are explicitly assessed rather than being misclassified as issue removal/introduction.
 - Adversarial tests cover severity changes, severity escalation despite a higher overall score, dimension tradeoffs where a core dimension regresses, repeated revisions using the immediate previous baseline, and preservation of the stronger prior candidate after a regression.
 
+## Phase E — Development trace exposure (implemented baseline)
+- Added `POST /v1/engine/trace` as an additive development interface.
+- The normal `/v1/engine` contract is unchanged.
+- Trace responses serialize only `TraceEvent` timestamp/stage/status/details metadata and preserve the existing payload-safety boundary.
+- Added service-level tests for additive response shape and trace payload exclusion.
+- Future work can add authenticated/protected development access or richer status views without coupling the core engine to UI concerns.
+
 ## Current roadmap
 ### Phase C follow-up
 - Add genuine sandboxed code execution/tests only when secure bounded infrastructure is available.
@@ -108,8 +116,9 @@ User -> Task Contract -> Mode/Profile -> Model Router -> Primary
 ### Phase D follow-up
 - Continue adversarial/corner-case testing around multi-issue interactions, missing dimensions, score ties, and mixed improvements/regressions.
 
-## Phase E — Development trace exposure
-Expose trace/status through an additive development interface for the UI agent. Do not casually change `/v1/engine`.
+### Phase E follow-up
+- Add stronger access control if the development trace endpoint is ever exposed beyond a trusted local/development environment.
+- Consider bounded run/status metadata if the UI needs progress/state without exposing model payloads or internal prompts.
 
 ## Working procedure
 1. Read this file first.

@@ -15,7 +15,7 @@ Build an evaluation-driven answer/revision engine that generates, independently 
 ## Core flow
 ```text
 User -> Task Contract -> Mode/Profile -> Model Router -> Primary
-     -> Evaluation + Evidence -> Decision
+     -> Evaluation + Evidence -> Revision Quality -> Decision
         -> ACCEPT / ASK / REVISE -> Primary again
      -> best valid version
 ```
@@ -46,6 +46,9 @@ User -> Task Contract -> Mode/Profile -> Model Router -> Primary
 - Phase C deterministic verification primitives now exist in `engine/revise/verifiers.py`: arithmetic consistency checks, Python AST syntax checks without execution, and JSON syntax checks. Profiles select only relevant deterministic checks, and the engine fuses their evidence with Secondary/custom verifier evidence before decision policy.
 - Arithmetic task detection now also recognizes explicit numeric expressions using ASCII or Unicode operators such as `25 × 17`, and the arithmetic verifier can compare a direct numeric answer against a single arithmetic expression in the task.
 - Phase C deliberately does not execute arbitrary generated code; safe compiler/test execution remains a future bounded verifier capability.
+- Phase D revision quality is implemented in `engine/revise/revision.py`. Each revision is compared with its immediately previous evaluated version; the engine tracks score delta/net improvement, resolved and introduced issues, improved and regressed dimensions, and an overall revision status.
+- Phase D decision policy rejects unchanged or regressed revisions, while allowing revisions with a genuine score/dimension improvement or relevant issue resolution. Material introduced issues and dimension regressions are treated as regressions. The best valid prior version remains selectable when a later revision is rejected.
+- Revision assessment is stored in `Version.metadata` and summarized in the development trace; response payloads remain excluded from trace details.
 
 ## Current model/runtime policy
 - Default Primary: `gemini / gemini-3.7-flash`.
@@ -81,14 +84,23 @@ User -> Task Contract -> Mode/Profile -> Model Router -> Primary
 - Regression tests cover wrong arithmetic, direct numeric answers for Unicode multiplication expressions, Python syntax checking, JSON syntax checking, and profile selection for explicit arithmetic expressions.
 - Safe runtime code tests, richer schema validation, citation/source verification, and broader external evidence remain follow-up work rather than being faked as complete.
 
+## Phase D — Revision quality (implemented)
+- Added `RevisionAssessment` and `assess_revision()` as a provider-neutral comparison layer.
+- Tracks baseline/revised score, score delta/net improvement, resolved issues, introduced issues, improved dimensions, regressed dimensions, and status (`improved`, `regressed`, `unchanged`).
+- A revision with unchanged quality cannot be accepted solely because it crosses an absolute threshold.
+- Regressions cannot be accepted; the bounded loop continues if budget remains and otherwise returns `ASK`, with best-version selection preserving the stronger valid candidate.
+- A revision with no score increase can still qualify as improved when it resolves a relevant prior issue or improves a dimension.
+- Tests cover improvement, regression, unchanged revisions, issue resolution, trace assessment, and existing revision behavior.
+
 ## Current roadmap
 ### Phase C follow-up
 - Add richer schema validation when the task contract can carry an explicit schema.
 - Add safe, sandboxed code tests/compiler checks where infrastructure permits.
 - Add citation/source verification and other external evidence adapters.
+- Strengthen deterministic evidence precedence with adversarial tests where Secondary incorrectly passes a deterministically failing candidate.
 
-### Phase D — Revision quality
-Require revisions to materially improve task success or resolve relevant issues; track baseline quality, revision quality, resolved/introduced issues, and net improvement.
+### Phase D follow-up
+- Deep-debug revision quality with adversarial/corner-case tests, especially issue identity, severity interactions, multi-dimensional tradeoffs, and repeated revisions.
 
 ### Phase E — Development trace exposure
 Expose trace/status through an additive development interface for the UI agent. Do not casually change `/v1/engine`.

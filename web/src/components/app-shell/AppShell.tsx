@@ -6,8 +6,10 @@ import remarkGfm from "remark-gfm";
 import { createEngineClient, type EngineModel } from "@/engine/client";
 
 const MODELS: Array<EngineModel & { label: string; providerLabel: string }> = [
-  { provider: "gemini", model: "gemini-3.8-flash", label: "Gemini 3.8 Flash", providerLabel: "Gemini" },
-  { provider: "gemini", model: "gemini-3.5-flash-lite", label: "Gemini 3.5 Flash Lite", providerLabel: "Gemini" },
+  { provider: "gemini", model: "gemini-3.7-flash", label: "Gemini 3.7 Flash", providerLabel: "Gemini" },
+  { provider: "gemini", model: "gemini-3.1-flash-lite", label: "Gemini 3.1 Flash-Lite", providerLabel: "Gemini" },
+  { provider: "groq", model: "openai/gpt-oss-120b", label: "GPT-OSS 120B", providerLabel: "Groq" },
+  { provider: "openrouter", model: "openrouter/free", label: "OpenRouter Free", providerLabel: "OpenRouter" },
 ];
 
 type Message = {

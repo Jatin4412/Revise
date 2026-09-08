@@ -18,17 +18,24 @@ class DeterministicVerifier(Protocol):
         ...
 
 
+_ARITHMETIC_EXPRESSION_RE = re.compile(r"\d+(?:\s*(?:[+\-*/×÷])\s*\d+)+")
+_NUMERIC_ANSWER_RE = re.compile(r"^\s*(-?\d+(?:\.\d+)?)\s*$")
+
+
 @dataclass(frozen=True)
 class ArithmeticVerifier:
-    """Checks simple arithmetic equalities found in a response."""
+    """Checks simple arithmetic equalities and direct numeric answers."""
 
     name: str = "arithmetic"
 
     def verify(self, contract: TaskContract, response: str) -> tuple[Evidence, ...]:
-        del contract
         evidence: list[Evidence] = []
-        pattern = re.compile(r"(?P<expr>\d+(?:\s*[+\-*/]\s*\d+)+)\s*=\s*(?P<value>-?\d+(?:\.\d+)?)")
-        for match in pattern.finditer(response):
+
+        # First check explicit arithmetic equalities in the generated response.
+        equality_pattern = re.compile(
+            r"(?P<expr>\d+(?:\s*[+\-*/×÷]\s*\d+)+)\s*=\s*(?P<value>-?\d+(?:\.\d+)?)"
+        )
+        for match in equality_pattern.finditer(response):
             expression = match.group("expr")
             expected = float(match.group("value"))
             try:
@@ -36,7 +43,41 @@ class ArithmeticVerifier:
             except (ArithmeticError, ValueError, SyntaxError):
                 continue
             passed = abs(actual - expected) <= 1e-9
-            evidence.append(Evidence("deterministic.arithmetic", "deterministic", "pass" if passed else "fail", 1.0, (f"{expression} = {match.group('value')}",)))
+            evidence.append(
+                Evidence(
+                    "deterministic.arithmetic",
+                    "deterministic",
+                    "pass" if passed else "fail",
+                    1.0,
+                    (f"{expression} = {match.group('value')}",),
+                )
+            )
+
+        # If the task contains a direct arithmetic expression, compare it with
+        # a response that is itself a single numeric answer. This catches cases
+        # such as: prompt "What is 25 × 17?" -> response "425".
+        task_expressions = _ARITHMETIC_EXPRESSION_RE.findall(contract.goal)
+        if len(task_expressions) == 1:
+            expression = task_expressions[0]
+            answer = _NUMERIC_ANSWER_RE.fullmatch(response)
+            if answer is not None:
+                try:
+                    expected = _safe_arithmetic(expression)
+                    actual = float(answer.group(1))
+                except (ArithmeticError, ValueError, SyntaxError):
+                    expected = actual = None
+                if expected is not None and actual is not None:
+                    passed = abs(expected - actual) <= 1e-9
+                    evidence.append(
+                        Evidence(
+                            "deterministic.arithmetic",
+                            "deterministic",
+                            "pass" if passed else "fail",
+                            1.0,
+                            (f"task_expression:{expression}", f"numeric_answer:{answer.group(1)}"),
+                        )
+                    )
+
         return tuple(evidence)
 
 
@@ -100,7 +141,8 @@ def run_deterministic_verifiers(contract: TaskContract, response: str, profile: 
 
 
 def _safe_arithmetic(expression: str) -> float:
-    tree = ast.parse(expression, mode="eval")
+    normalized = expression.replace("×", "*").replace("÷", "/")
+    tree = ast.parse(normalized, mode="eval")
 
     def visit(node: ast.AST) -> float:
         if isinstance(node, ast.Expression):

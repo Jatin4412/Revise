@@ -199,6 +199,13 @@ class Engine:
         issues = tuple(issue.description for issue in evaluation.issues)
         if issues:
             parts.append("Issues:\n" + "\n".join(f"- {item}" for item in issues))
+        dimension_feedback = tuple(
+            f"- {name}: {dimension.status}; score={dimension.score}; confidence={dimension.confidence}; reason={dimension.reason}"
+            for name, dimension in evaluation.dimensions.items()
+            if dimension.status in {"fail", "partial"} or (dimension.score is not None and name in evaluation.dimensions)
+        )
+        if dimension_feedback:
+            parts.append("Dimension feedback:\n" + "\n".join(dimension_feedback))
         if evaluation.revision.instructions:
             parts.append("Revision instructions:\n" + "\n".join(f"- {item}" for item in evaluation.revision.instructions))
         return "\n\n".join(parts)

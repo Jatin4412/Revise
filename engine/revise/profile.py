@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+import re
+
 from .models import EvaluationProfile, Mode, TaskContract
 
 CORE = ("goal_alignment", "task_completion", "correctness", "relevance", "completeness", "instruction_following")
 COMMUNICATION = ("coherence", "clarity", "usability", "appropriate_depth", "conciseness")
 RELIABILITY = ("groundedness", "evidence_quality", "uncertainty_calibration", "assumption_quality", "context_utilization")
 SPECIALIZED = ("mathematical_validity", "code_correctness", "logical_validity")
+
+
+_MATH_EXPRESSION_RE = re.compile(r"\d+(?:\s*(?:[+\-*/×÷])\s*\d+)+")
 
 
 def build_profile(contract: TaskContract) -> EvaluationProfile:
@@ -17,7 +22,7 @@ def build_profile(contract: TaskContract) -> EvaluationProfile:
         dimensions.append("code_correctness")
         if "python" in text:
             deterministic_checks.append("python_syntax")
-    if any(k in text for k in ("math", "calculate", "equation", "formula", "arithmetic")):
+    if any(k in text for k in ("math", "calculate", "equation", "formula", "arithmetic")) or _MATH_EXPRESSION_RE.search(text):
         dimensions.append("mathematical_validity")
         deterministic_checks.append("arithmetic")
     if any(k in text for k in ("logic", "proof", "reasoning")):

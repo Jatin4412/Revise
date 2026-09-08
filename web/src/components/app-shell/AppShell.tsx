@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { createEngineClient, type EngineModel } from "@/engine/client";
 
 const MODELS: Array<EngineModel & { label: string; providerLabel: string }> = [
@@ -27,6 +29,27 @@ function ChevronIcon() {
 
 function Logo() {
   return <div className="logo-mark" aria-label="Reiterate">R</div>;
+}
+
+function AssistantMarkdown({ content }: { content: string }) {
+  return (
+    <div className="markdown-content">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          pre: ({ children }) => <pre className="markdown-code-block">{children}</pre>,
+          code: ({ className, children, ...props }) => {
+            if (className) {
+              return <code className={className} {...props}>{children}</code>;
+            }
+            return <code className="markdown-inline-code" {...props}>{children}</code>;
+          },
+        }}
+      >
+        {content}
+      </ReactMarkdown>
+    </div>
+  );
 }
 
 export function AppShell() {
@@ -110,7 +133,9 @@ export function AppShell() {
             {messages.map((message, index) => (
               <div className={`message message-${message.role}`} key={`${message.role}-${index}`}>
                 {message.role === "assistant" && <div className="message-avatar">R</div>}
-                <div className="message-body">{message.text}</div>
+                <div className="message-body">
+                  {message.role === "assistant" ? <AssistantMarkdown content={message.text} /> : message.text}
+                </div>
                 {message.role === "user" && <div className="message-avatar">You</div>}
               </div>
             ))}

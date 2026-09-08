@@ -10,7 +10,8 @@ from engine.llm import LLMSecondary, _groq_callable, _parse_evaluation
 from engine.model import ModelRouter, ModelSelection, SecondaryRouter
 from engine.revise.decision import decide
 from engine.revise.evaluator import evaluate
-from engine.revise.models import Decision, DimensionResult, EvaluationProfile, EvaluationResult, Mode, TaskContract
+from engine.revise.models import Decision, DimensionResult, EvaluationProfile, EvaluationResult, Issue, Mode, Severity, TaskContract
+from engine.revise.revision import assess_revision
 from engine.revise.verifiers import run_deterministic_verifiers
 
 
@@ -56,6 +57,67 @@ class EngineTests(unittest.TestCase):
         self.assertIsNotNone(primary.contexts[1])
         self.assertIn("incomplete", primary.contexts[1] or "")
         self.assertIn("response is incomplete", primary.contexts[1] or "")
+        assessment = result.versions[1].metadata["revision_assessment"]
+        self.assertEqual(assessment.status, "improved")
+        self.assertEqual(assessment.resolved_issues, ())
+        self.assertGreater(assessment.net_improvement, 0.0)
+
+    def test_revision_regression_cannot_be_accepted(self) -> None:
+        baseline = EvaluationResult(
+            Decision.REVISE,
+            0.80,
+            1.0,
+            {"correctness": DimensionResult(0.80, 1.0, "pass", "baseline")},
+            issues=(Issue("quality", Severity.MODERATE, "needs improvement"),),
+        )
+        revised = EvaluationResult(
+            Decision.ACCEPT,
+            0.70,
+            1.0,
+            {"correctness": DimensionResult(0.70, 1.0, "pass", "regressed")},
+        )
+        assessment = assess_revision(baseline, revised)
+        self.assertIsNotNone(assessment)
+        self.assertEqual(assessment.status, "regressed")
+        profile = EvaluationProfile(dimensions=("correctness",), minimum_scores={"correctness": 0.60}, minimum_overall_score=0.60, max_revisions=1)
+        decided = decide(TaskContract(goal="task"), profile, revised, revisions_used=1, revision_assessment=assessment)
+        self.assertEqual(decided.decision, Decision.ASK)
+
+    def test_revision_unchanged_requests_another_pass(self) -> None:
+        baseline = EvaluationResult(
+            Decision.REVISE,
+            0.80,
+            1.0,
+            {"correctness": DimensionResult(0.80, 1.0, "pass", "same")},
+        )
+        revised = EvaluationResult(
+            Decision.ACCEPT,
+            0.80,
+            1.0,
+            {"correctness": DimensionResult(0.80, 1.0, "pass", "same")},
+        )
+        assessment = assess_revision(baseline, revised)
+        self.assertEqual(assessment.status, "unchanged")
+        profile = EvaluationProfile(dimensions=("correctness",), minimum_scores={"correctness": 0.70}, max_revisions=1)
+        self.assertEqual(decide(TaskContract(goal="task"), profile, revised, revisions_used=0, revision_assessment=assessment).decision, Decision.REVISE)
+
+    def test_revision_resolved_issue_counts_as_improvement(self) -> None:
+        baseline = EvaluationResult(
+            Decision.REVISE,
+            0.80,
+            1.0,
+            {"correctness": DimensionResult(0.80, 1.0, "pass", "same score")},
+            issues=(Issue("missing_detail", Severity.MODERATE, "missing required detail"),),
+        )
+        revised = EvaluationResult(
+            Decision.ACCEPT,
+            0.80,
+            1.0,
+            {"correctness": DimensionResult(0.80, 1.0, "pass", "same score")},
+        )
+        assessment = assess_revision(baseline, revised)
+        self.assertEqual(assessment.status, "improved")
+        self.assertEqual(len(assessment.resolved_issues), 1)
 
     def test_trace_records_revision_and_final_decision(self) -> None:
         result = Engine(SequencePrimary(["incomplete", "complete answer"]), secondary=BasicSecondary()).run(TaskContract(goal="complete the task"), profile=EvaluationProfile(dimensions=("task_completion",), minimum_scores={"task_completion": 0.70}, max_revisions=1))
@@ -65,6 +127,7 @@ class EngineTests(unittest.TestCase):
         self.assertIn(("evaluation", "dimension"), events)
         self.assertIn(("decision", "revise"), events)
         self.assertIn(("revision", "requested"), events)
+        self.assertIn(("revision", "assessed"), events)
         self.assertIn(("decision", "accept"), events)
         self.assertEqual(result.trace[-1].stage, "final")
 

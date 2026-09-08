@@ -28,12 +28,25 @@ def evaluate(
 
     fused = fuse_evidence(evidence)
     known = [d for d in dimensions.values() if d.status != "unknown"]
-    scores = [d.score for d in known if d.score is not None]
+    weighted = [
+        (name, dimensions[name])
+        for name in profile.dimensions
+        if name in dimensions and dimensions[name].status != "unknown" and dimensions[name].score is not None
+    ]
+    total_weight = sum(max(0.0, profile.dimension_weights.get(name, 1.0)) for name, _ in weighted)
+    if total_weight:
+        overall_score = sum(
+            float(d.score) * max(0.0, profile.dimension_weights.get(name, 1.0))
+            for name, d in weighted
+        ) / total_weight
+    else:
+        overall_score = None
+
     confidence = sum(d.confidence for d in known) / len(known) if known else fused.confidence
 
     return EvaluationResult(
         decision=Decision.ACCEPT,
-        overall_score=sum(scores) / len(scores) if scores else None,
+        overall_score=overall_score,
         confidence=confidence,
         dimensions=dimensions,
         evidence=fused.evidence,

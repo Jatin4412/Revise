@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import json
+import os
 import unittest
+from unittest.mock import patch
 
 from engine import Engine, EngineRequest, EngineService, FunctionPrimary
-from engine.llm import LLMSecondary
+from engine.llm import LLMSecondary, _groq_callable
 from engine.model import ModelRouter, ModelSelection, SecondaryRouter
 from engine.revise.models import DimensionResult, EvaluationProfile, Mode, TaskContract
 
@@ -26,6 +29,17 @@ class BasicSecondary:
             return DimensionResult(0.2, 1.0, "fail", "response is incomplete")
 
         return {"task_completion": task_completion}
+
+
+class FakeHTTPResponse:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def read(self):
+        return json.dumps({"choices": [{"message": {"content": "hello"}}]}).encode("utf-8")
 
 
 class EngineTests(unittest.TestCase):
@@ -126,6 +140,31 @@ class EngineTests(unittest.TestCase):
 
         self.assertEqual(result.dimensions["task_completion"].status, "pass")
         self.assertIn("candidate answer", seen[0])
+
+    def test_groq_request_uses_explicit_client_identity(self) -> None:
+        previous = os.environ.get("GROQ_API_KEY")
+        os.environ["GROQ_API_KEY"] = "test-key"
+        captured = {}
+        try:
+            def fake_urlopen(req, timeout):
+                captured["url"] = req.full_url
+                captured["headers"] = dict(req.header_items())
+                captured["timeout"] = timeout
+                return FakeHTTPResponse()
+
+            with patch("engine.llm.request.urlopen", fake_urlopen):
+                result = _groq_callable("openai/gpt-oss-120b", role="primary")("hello")
+
+            self.assertEqual(result, "hello")
+            self.assertEqual(captured["url"], "https://api.groq.com/openai/v1/chat/completions")
+            self.assertEqual(captured["headers"]["Authorization"], "Bearer test-key")
+            self.assertEqual(captured["headers"]["User-agent"], "ReviseEngine/0.1")
+            self.assertEqual(captured["timeout"], 60.0)
+        finally:
+            if previous is None:
+                os.environ.pop("GROQ_API_KEY", None)
+            else:
+                os.environ["GROQ_API_KEY"] = previous
 
 
 if __name__ == "__main__":

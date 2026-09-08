@@ -49,7 +49,7 @@ User -> Task Contract -> Mode/Profile -> Model Router -> Primary
 - Phase C external source verification exists in `engine/revise/external.py`. Research/source/citation/factual profiles select it separately from `groundedness` and `evidence_quality`. The default verifier checks bounded HTTP(S) source reachability only, rejects private/loopback/link-local/reserved targets, rejects embedded URL credentials, validates redirect targets, limits sources and bytes, and never claims that reachability proves factual support.
 - External verification failures participate in evidence precedence and block acceptance when a required cited source is unreachable or required citations are missing.
 - Phase D revision quality is implemented in `engine/revise/revision.py`. Each revision is compared with its immediately previous evaluated version; the engine tracks score delta/net improvement, resolved and introduced issues, improved and regressed dimensions, and an overall revision status.
-- Revision issue identity is stable across severity changes using issue type, location, and normalized description. Severity changes are tracked separately as downgraded or escalated issues; escalations are regressions and downgrades count as improvement signals.
+- Revision issue identity is stable across severity changes using normalized issue type, location, and whitespace/case-normalized description. Severity changes are tracked separately as downgraded or escalated issues; escalations are regressions and downgrades count as improvement signals.
 - Phase D decision policy rejects unchanged or regressed revisions, while allowing revisions with a genuine score/dimension improvement or relevant issue resolution. Material introduced issues and dimension regressions are treated as regressions. The best valid prior version remains selectable when a later revision is rejected.
 - Revision assessment is stored in `Version.metadata` and summarized in the development trace; response payloads remain excluded from trace details.
 - Phase E service compatibility was hardened so the application boundary does not assume concrete `Engine` internals when used with injected or lightweight engine implementations.
@@ -112,15 +112,17 @@ User -> Task Contract -> Mode/Profile -> Model Router -> Primary
 - Issue identity is preserved across severity changes; severity downgrades and escalations are explicitly assessed rather than being misclassified as issue removal/introduction.
 - Adversarial tests cover severity changes, severity escalation despite a higher overall score, dimension tradeoffs where a core dimension regresses, repeated revisions using the immediate previous baseline, and preservation of the stronger prior candidate after a regression.
 - Policy-contract and stabilization tests validate profile structure, evidence requirements, verifier budgets, malformed evaluator outputs, stopping behavior, hard gates, and best-version invariants.
+- Additional adversarial coverage validates score ties, mixed issue resolution/introduction, missing-dimension regression, and stable issue identity across case/whitespace changes.
 
-## Phase E — Development trace exposure (implemented baseline)
+## Phase E — Development trace exposure (implemented)
 - Added `POST /v1/engine/trace` as an additive development interface.
 - The normal `/v1/engine` contract is unchanged.
 - Trace responses serialize only `TraceEvent` timestamp/stage/status/details metadata and preserve the existing payload-safety boundary.
 - Service compatibility is covered for concrete and lightweight/injected engine implementations.
-- Future work can add authenticated/protected development access or richer status views without coupling the core engine to UI concerns.
+- Trace access is now protected for non-loopback hosts and supports optional `REVISE_TRACE_TOKEN` / `X-Revise-Trace-Token` authentication while preserving trusted local development behavior.
+- Durable security guidance is documented in `core/trace_security.md`.
 
-## Foundation stabilization — current phase
+## Foundation stabilization — completed on main
 - Policy objects fail closed when structurally invalid.
 - Hard-gate policy is enforced by the decision layer rather than being decorative configuration.
 - Missing configured deterministic/external verifiers fail closed rather than disappearing from the evaluation path.
@@ -128,18 +130,20 @@ User -> Task Contract -> Mode/Profile -> Model Router -> Primary
 - Evidence requirements now affect acceptance.
 - Evaluator result validation now fails closed.
 - `stop_on_no_improvement` and best-version invariants are implemented.
-- Stabilization regression fixes are now present on the working branch; local execution remains the final confirmation point before merging to `main`.
+- External verifier deduplication/source-limit behavior is regression-tested.
+- Phase E development trace access hardening is merged.
+- Main branch was locally verified at merge with 85 passing tests.
 
 ## Roadmap after stabilization
 ### Phase C follow-up
 - Add genuine sandboxed code execution/tests only when secure bounded infrastructure is available.
 - Add richer external evidence adapters that can verify structured source metadata or task-specific facts without conflating reachability with claim truth.
 
-### Phase D follow-up
+### Phase D follow-up — in progress
 - Continue adversarial/corner-case testing around multi-issue interactions, missing dimensions, score ties, and mixed improvements/regressions.
+- Next focus: verify decision-layer behavior for adversarial revision assessments and interactions between revision quality, hard gates, evidence requirements, and verification failures.
 
 ### Phase E follow-up
-- Add stronger access control if the development trace endpoint is ever exposed beyond a trusted local/development environment.
 - Consider bounded run/status metadata if the UI needs progress/state without exposing model payloads or internal prompts.
 
 ## Working procedure

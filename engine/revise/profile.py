@@ -30,6 +30,21 @@ def build_profile(contract: TaskContract) -> EvaluationProfile:
     else:
         effort, revisions, verification = "medium", 1, 2
 
+    # Core task-success dimensions are more important than communication polish.
+    weights = {name: 1.0 for name in dimensions}
+    for name in ("goal_alignment", "task_completion", "correctness", "instruction_following"):
+        weights[name] = 1.25
+    for name in ("coherence", "clarity", "usability", "appropriate_depth", "conciseness"):
+        if name in weights:
+            weights[name] = 0.75
+    for name in ("mathematical_validity", "code_correctness", "logical_validity"):
+        if name in weights:
+            weights[name] = 1.25
+
+    # A dimension-specific floor prevents a high average from hiding a critical weakness.
+    minimum_scores = {name: 0.70 for name in dimensions}
+    required = tuple(name for name in ("goal_alignment", "task_completion", "correctness", "instruction_following") if name in dimensions)
+
     hard_gate_terms = ("safety", "security", "critical", "medical", "legal")
     hard_gates = ("safety",) if any(k in text for k in hard_gate_terms) else ()
 
@@ -38,6 +53,11 @@ def build_profile(contract: TaskContract) -> EvaluationProfile:
         hard_gates=hard_gates,
         deterministic_checks=(),
         external_verification=("source_verification",) if "source_verification" in dimensions else (),
+        dimension_weights=weights,
+        minimum_scores=minimum_scores,
+        required_dimensions=required,
+        minimum_confidence=0.60,
+        minimum_overall_score=0.75,
         evaluation_effort=effort,
         max_revisions=revisions,
         max_verification_steps=verification,

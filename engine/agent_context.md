@@ -42,7 +42,7 @@ User -> Task Contract -> Mode/Profile -> Model Router -> Primary
 - Structured Secondary evaluation exists.
 - HTTP boundary is stable: `GET /health`, `POST /v1/engine`, success `{text, decision, version_id}`, generic error `{error:{code,message}}`.
 - Phase A execution observability is complete: structured trace records request, contract/profile, Primary, Secondary, per-dimension evaluation, verifier, decision, revisions, and final selection. Trace excludes prompts, responses, and credentials. Console trace is enabled for the local default service.
-- Local end-to-end runtime has been verified for Gemini 3.1 Flash-Lite and OpenRouter Free. Gemini 3.7 Flash returned a provider-side 503 high-demand response during testing. Groq GPT-OSS 120B returned HTTP 403 with Cloudflare error code 1010 during testing.
+- Local end-to-end runtime has been verified for Gemini 3.1 Flash-Lite, OpenRouter Free, and Groq GPT-OSS 120B. Gemini 3.7 Flash returned a provider-side 503 high-demand response during testing before later retries may be attempted.
 
 ## Current model/runtime policy
 - Default Primary: `gemini / gemini-3.7-flash`.
@@ -50,18 +50,18 @@ User -> Task Contract -> Mode/Profile -> Model Router -> Primary
 - Current free testing lineup: Gemini 3.7 Flash, Gemini 3.1 Flash-Lite, Groq GPT-OSS 120B, and OpenRouter Free.
 - Groq uses the official OpenAI-compatible Chat Completions endpoint with `openai/gpt-oss-120b`.
 - OpenRouter uses the OpenAI-compatible Chat Completions endpoint with `openrouter/free`.
+- Groq/OpenRouter compatible requests send `User-Agent: ReviseEngine/0.1`.
 - Grok and OpenAI adapters remain supported for users with paid API access but are not presented as free choices.
 
 ## Current provider diagnosis
-- Groq's official documentation confirms `https://api.groq.com/openai/v1/chat/completions` and `openai/gpt-oss-120b` are valid. The observed 403/1010 is therefore not explained by an invalid endpoint or model ID.
-- The Groq adapter now sends an explicit `User-Agent: ReviseEngine/0.1` on OpenAI-compatible requests. This is a small compatibility change aimed at the observed Cloudflare edge rejection; it does not alter core engine behavior.
-- A unit test covers the Groq request endpoint, authorization header, client identity, and timeout. The real API key/network path still needs a local runtime retest after updating the repo.
+- Groq's previous HTTP 403 / Cloudflare error 1010 was resolved in local end-to-end testing after the compatibility update; GPT-OSS 120B successfully completed as Primary and Gemini 3.1 Flash-Lite successfully evaluated it.
+- A provider smoke-test matrix now exists at `engine/provider_matrix.py`. It exercises the four current free-test providers with three consistent prompts each, reports latency/HTTP status/output preview, and does not alter engine evaluation behavior.
 
 ## Current known limitations / next roadmap
 ### Provider testing (current)
-- Retest Groq after pulling the latest engine commit.
-- If Groq still returns 403/1010, treat it as an environment/network/edge restriction rather than changing core evaluation behavior; compare with a direct curl request using the same key.
-- Run a small consistent prompt matrix across Gemini 3.1 Flash-Lite and OpenRouter Free before Phase B.
+- Run `python -m engine.provider_matrix` locally to exercise the four current free-test providers.
+- Treat transient provider availability/auth/network failures as provider/runtime issues unless the same failure reproduces in a direct provider request.
+- Compare model behavior using the same prompts before changing evaluation logic.
 
 ### Phase B — Strengthen evaluation (next after provider testing)
 - Make profiles drive rigorous task-specific checks.

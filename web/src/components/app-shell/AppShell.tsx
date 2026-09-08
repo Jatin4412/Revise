@@ -1,12 +1,17 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { createEngineClient } from "@/engine/client";
+import { createEngineClient, type EngineModel } from "@/engine/client";
 
-const MODELS = [
-  { provider: "google", model: "gemini-2.5-flash", label: "Gemini 2.5 Flash", providerLabel: "Google" },
-  { provider: "google", model: "gemini-2.5-pro", label: "Gemini 2.5 Pro", providerLabel: "Google" },
+const MODELS: Array<EngineModel & { label: string; providerLabel: string }> = [
+  { provider: "gemini", model: "gemini-3.8-flash", label: "Gemini 3.8 Flash", providerLabel: "Gemini" },
+  { provider: "gemini", model: "gemini-3.5-flash-lite", label: "Gemini 3.5 Flash Lite", providerLabel: "Gemini" },
 ];
+
+type Message = {
+  role: "user" | "assistant";
+  text: string;
+};
 
 function SendIcon() {
   return <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="m5 12 14-7-4 14-3.5-6.5L5 12Z" /><path d="m11.5 12.5 3-1.5" /></svg>;
@@ -26,10 +31,13 @@ function Logo() {
 
 export function AppShell() {
   const [input, setInput] = useState("");
-  const [messages, setMessages] = useState<string[]>([]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [modelOpen, setModelOpen] = useState(false);
   const [selectedModel, setSelectedModel] = useState(MODELS[0]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const scrollRef = useRef<HTMLElement>(null);
   const engineClient = useRef(createEngineClient());
 
   useEffect(() => {
@@ -39,29 +47,45 @@ export function AppShell() {
     textarea.style.height = `${Math.min(textarea.scrollHeight, 180)}px`;
   }, [input]);
 
+  useEffect(() => {
+    const scroll = scrollRef.current;
+    if (!scroll) return;
+    scroll.scrollTo({ top: scroll.scrollHeight, behavior: "smooth" });
+  }, [messages, isLoading, error]);
+
   async function submit() {
     const value = input.trim();
-    if (!value) return;
-    setMessages((current) => [...current, value]);
+    if (!value || isLoading) return;
+
+    setError(null);
+    setMessages((current) => [...current, { role: "user", text: value }]);
     setInput("");
+    setIsLoading(true);
 
     try {
-      await engineClient.current.request({
-        type: "chat",
-        payload: {
-          prompt: value,
+      const response = await engineClient.current.request({
+        prompt: value,
+        mode: "basic",
+        primary_model: {
           provider: selectedModel.provider,
           model: selectedModel.model,
         },
       });
+
+      setMessages((current) => [...current, { role: "assistant", text: response.text }]);
     } catch {
-      // The engine transport is intentionally not configured in the UI yet.
+      setError("Revise couldn't generate a response right now.");
+    } finally {
+      setIsLoading(false);
+      textareaRef.current?.focus();
     }
   }
 
   function newChat() {
+    if (isLoading) return;
     setMessages([]);
     setInput("");
+    setError(null);
     setModelOpen(false);
     textareaRef.current?.focus();
   }
@@ -75,8 +99,8 @@ export function AppShell() {
         </button>
       </header>
 
-      <section className="chat-scroll" aria-label="Conversation">
-        {messages.length === 0 ? (
+      <section ref={scrollRef} className="chat-scroll" aria-label="Conversation">
+        {messages.length === 0 && !isLoading && !error ? (
           <div className="welcome">
             <Logo />
             <h1>What do you want to work on?</h1>
@@ -85,11 +109,23 @@ export function AppShell() {
         ) : (
           <div className="messages">
             {messages.map((message, index) => (
-              <div className="message" key={`${message}-${index}`}>
-                <div className="message-avatar">You</div>
-                <div className="message-body">{message}</div>
+              <div className={`message message-${message.role}`} key={`${message.role}-${index}`}>
+                <div className="message-avatar">{message.role === "user" ? "You" : "R"}</div>
+                <div className="message-body">{message.text}</div>
               </div>
             ))}
+            {isLoading && (
+              <div className="message message-assistant" aria-live="polite">
+                <div className="message-avatar">R</div>
+                <div className="message-body message-thinking">Thinking…</div>
+              </div>
+            )}
+            {error && (
+              <div className="message message-assistant" role="alert">
+                <div className="message-avatar">R</div>
+                <div className="message-body message-error">{error}</div>
+              </div>
+            )}
           </div>
         )}
       </section>
@@ -109,17 +145,18 @@ export function AppShell() {
             placeholder="Message Reiterate..."
             rows={1}
             aria-label="Message Reiterate"
+            disabled={isLoading}
           />
           <div className="composer-footer">
             <div className="composer-left">
-              <button type="button" className="attach-button" aria-label="Add attachment"><PlusIcon /></button>
+              <button type="button" className="attach-button" aria-label="Add attachment" disabled={isLoading}><PlusIcon /></button>
               <div className="model-picker">
-                <button type="button" className="model-button" onClick={() => setModelOpen((open) => !open)} aria-haspopup="listbox" aria-expanded={modelOpen}>
+                <button type="button" className="model-button" onClick={() => setModelOpen((open) => !open)} aria-haspopup="listbox" aria-expanded={modelOpen} disabled={isLoading}>
                   <span>{selectedModel.label}</span>
                   <ChevronIcon />
                 </button>
-                {modelOpen && (
-                  <div className="model-menu" role="listbox" aria-label="Choose model">
+                {modelOpen && !isLoading && (
+                  <div className="model-menu" role="listbox" aria-label="Choose primary model">
                     {MODELS.map((option) => (
                       <button
                         key={`${option.provider}:${option.model}`}
@@ -138,7 +175,7 @@ export function AppShell() {
                 )}
               </div>
             </div>
-            <button className="send-button" type="submit" disabled={!input.trim()} aria-label="Send message"><SendIcon /></button>
+            <button className="send-button" type="submit" disabled={!input.trim() || isLoading} aria-label="Send message"><SendIcon /></button>
           </div>
         </form>
         <div className="composer-hint">Reiterate can make mistakes. Check important information.</div>

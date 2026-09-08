@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import json
+import math
 import re
 from dataclasses import dataclass
 from typing import Any, Protocol
@@ -11,7 +12,6 @@ from .models import Evidence, EvaluationProfile, TaskContract
 
 class DeterministicVerifier(Protocol):
     name: str
-
     def verify(self, contract: TaskContract, response: str) -> tuple[Evidence, ...]: ...
 
 
@@ -62,8 +62,7 @@ class PythonCompileVerifier:
         del contract
         evidence = []
         for index, snippet in enumerate(_PYTHON_BLOCK_RE.findall(response), 1):
-            try:
-                compile(snippet, f"<revise-python-{index}>", "exec", dont_inherit=True, optimize=0)
+            try: compile(snippet, f"<revise-python-{index}>", "exec", dont_inherit=True, optimize=0)
             except (SyntaxError, ValueError, TypeError, OverflowError) as exc:
                 evidence.append(Evidence("deterministic.python_compile", "deterministic", "fail", 1.0, (f"python_block_{index}", f"compile_error:{type(exc).__name__}", str(exc))))
             else:
@@ -95,20 +94,24 @@ class JsonSchemaVerifier:
         except json.JSONDecodeError as exc: return (Evidence("deterministic.json_schema", "deterministic", "fail", 1.0, (f"json_error:{exc.msg}",)),)
         try: errors = _validate_schema(value, schema, "$", root_schema=schema)
         except (TypeError, ValueError): errors = ("invalid schema",)
-        if errors: return (Evidence("deterministic.json_schema", "deterministic", "fail", 1.0, tuple(errors[:8])),)
-        return (Evidence("deterministic.json_schema", "deterministic", "pass", 1.0, ("schema_valid",)),)
+        return (Evidence("deterministic.json_schema", "deterministic", "fail" if errors else "pass", 1.0, tuple(errors[:8]) if errors else ("schema_valid",)),)
 
 
 _DEFAULT_VERIFIERS: dict[str, DeterministicVerifier] = {"arithmetic": ArithmeticVerifier(), "python_syntax": PythonSyntaxVerifier(), "python_compile": PythonCompileVerifier(), "json": JsonVerifier(), "json_schema": JsonSchemaVerifier()}
 
 
-def run_deterministic_verifiers(contract: TaskContract, response: str, profile: EvaluationProfile, *, registry: dict[str, DeterministicVerifier] | None = None) -> tuple[Evidence, ...]:
+def run_deterministic_verifiers(contract: TaskContract, response: str, profile: EvaluationProfile, *, registry: dict[str, DeterministicVerifier] | None = None, max_steps: int | None = None) -> tuple[Evidence, ...]:
     selected = registry or _DEFAULT_VERIFIERS
+    names = tuple(profile.deterministic_checks)
+    budget = profile.max_verification_steps if max_steps is None else max(0, max_steps)
     evidence: list[Evidence] = []
-    for name in profile.deterministic_checks:
+    for index, name in enumerate(names):
+        if index >= budget:
+            evidence.append(Evidence(f"deterministic.{name}", "deterministic", "fail", 1.0, ("verification_budget_exhausted",)))
+            continue
         verifier = selected.get(name)
         if verifier is None:
-            evidence.append(Evidence("deterministic.registry", "deterministic", "fail", 1.0, (f"verifier_unavailable:{name}",)))
+            evidence.append(Evidence(f"deterministic.{name}", "deterministic", "fail", 1.0, ("verifier_missing",)))
             continue
         evidence.extend(verifier.verify(contract, response))
     return tuple(evidence)
@@ -130,7 +133,9 @@ def _safe_arithmetic(expression: str) -> float:
         if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.UAdd, ast.USub)):
             value = visit(node.operand); return value if isinstance(node.op, ast.UAdd) else -value
         raise ValueError("unsupported arithmetic expression")
-    return visit(tree)
+    value = visit(tree)
+    if not math.isfinite(value): raise ValueError("non-finite arithmetic result")
+    return value
 
 
 def _expects_json(contract: TaskContract) -> bool:
@@ -183,8 +188,6 @@ def _validate_schema(value: Any, schema: Any, path: str, *, root_schema: dict[st
         elif isinstance(schema.get("additionalProperties"), dict):
             for key, item in value.items():
                 if key not in properties: errors.extend(_validate_schema(item, schema["additionalProperties"], f"{path}.{key}", root_schema=root_schema))
-        for key, message, condition in (("minProperties", "fewer than minProperties", len(value) < schema.get("minProperties", 0)), ("maxProperties", "more than maxProperties", len(value) > schema.get("maxProperties", len(value)))):
-            if key in schema and (not isinstance(schema[key], int) or condition): errors.append(f"{path}: {message}")
     if isinstance(value, list):
         items = schema.get("items")
         if isinstance(items, dict):

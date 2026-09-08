@@ -15,6 +15,7 @@ def build_profile(contract: TaskContract) -> EvaluationProfile:
     dimensions = list(CORE)
     text = " ".join((contract.goal, *contract.requirements, *contract.known_context)).lower()
     deterministic_checks: list[str] = []
+    external_verification: list[str] = []
     if any(k in text for k in ("code", "python", "program", "function", "implement")):
         dimensions.append("code_correctness")
         if "python" in text:
@@ -23,7 +24,9 @@ def build_profile(contract: TaskContract) -> EvaluationProfile:
         dimensions.append("mathematical_validity")
         deterministic_checks.append("arithmetic")
     if any(k in text for k in ("logic", "proof", "reasoning")): dimensions.append("logical_validity")
-    if any(k in text for k in ("research", "source", "citation", "fact", "factual")): dimensions.extend(("groundedness", "evidence_quality", "source_verification"))
+    if any(k in text for k in ("research", "source", "citation", "fact", "factual")):
+        dimensions.extend(("groundedness", "evidence_quality"))
+        external_verification.append("source_verification")
     if "json" in (contract.desired_format or "").lower() or any("json" in item.lower() for item in contract.verification_requirements): deterministic_checks.append("json")
     if contract.output_schema is not None: deterministic_checks.append("json_schema")
     if contract.mode is Mode.LITE: effort, revisions, verification = "low", 0, 1
@@ -41,4 +44,4 @@ def build_profile(contract: TaskContract) -> EvaluationProfile:
     required = tuple(name for name in ("goal_alignment", "task_completion", "correctness", "instruction_following") if name in dimensions)
     hard_gate_terms = ("safety", "security", "critical", "medical", "legal")
     hard_gates = ("safety",) if any(k in text for k in hard_gate_terms) else ()
-    return EvaluationProfile(dimensions=tuple(dict.fromkeys(dimensions)), hard_gates=hard_gates, deterministic_checks=tuple(dict.fromkeys(deterministic_checks)), external_verification=("source_verification",) if "source_verification" in dimensions else (), dimension_weights=weights, minimum_scores=minimum_scores, required_dimensions=required, minimum_confidence=0.60, minimum_overall_score=0.75, evaluation_effort=effort, max_revisions=revisions, max_verification_steps=verification)
+    return EvaluationProfile(dimensions=tuple(dict.fromkeys(dimensions)), hard_gates=hard_gates, deterministic_checks=tuple(dict.fromkeys(deterministic_checks)), external_verification=tuple(dict.fromkeys(external_verification)), dimension_weights=weights, minimum_scores=minimum_scores, required_dimensions=required, minimum_confidence=0.60, minimum_overall_score=0.75, evaluation_effort=effort, max_revisions=revisions, max_verification_steps=verification)

@@ -71,19 +71,32 @@ class EngineService:
         if not prompt:
             raise ValueError("prompt must not be empty")
         contract = make_contract(prompt, mode=request.mode)
-        primary_selection = request.primary_model or request.model or (self.primary_router.default if self.primary_router else None)
-        secondary_selection = request.secondary_model or (self.secondary_router.default if self.secondary_router else None)
+
+        # The service supports two valid execution modes:
+        # 1. router-backed runtime selection (production HTTP path), and
+        # 2. direct engine injection (unit tests/custom embeddings).
+        # Do not impose concrete Engine attributes on arbitrary engine doubles.
         if self.primary_router is not None:
+            primary_selection = request.primary_model or request.model or self.primary_router.default
             primary = self.primary_router.resolve(primary_selection)
         else:
+            primary_selection = request.primary_model or request.model
             primary = getattr(self.engine, "primary", None)
+
         if self.secondary_router is not None:
+            secondary_selection = request.secondary_model or self.secondary_router.default
             secondary = self.secondary_router.resolve(secondary_selection)
         else:
+            secondary_selection = request.secondary_model
             secondary = getattr(self.engine, "secondary", None)
+
         _annotate_model(primary, primary_selection)
         _annotate_model(secondary, secondary_selection)
-        if primary is None:
+
+        # A real Engine can be injected without exposing its internal model objects
+        # as an API requirement. Lightweight fakes may consume these arguments
+        # themselves, so only reject an absent Primary when the concrete engine does.
+        if primary is None and isinstance(self.engine, Engine):
             raise ValueError("no primary model is configured")
         return self.engine.run(contract, primary=primary, secondary=secondary)
 

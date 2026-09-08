@@ -12,6 +12,7 @@ from .service import EngineService, create_default_service
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8000
 ENGINE_PATH = "/v1/engine"
+TRACE_PATH = "/v1/engine/trace"
 HEALTH_PATH = "/health"
 
 
@@ -54,7 +55,7 @@ class EngineHTTPHandler(BaseHTTPRequestHandler):
         self._send_json(404, {"error": {"code": "not_found", "message": "endpoint not found"}})
 
     def do_POST(self) -> None:  # noqa: N802 - stdlib handler API
-        if self.path != ENGINE_PATH:
+        if self.path not in (ENGINE_PATH, TRACE_PATH):
             self._send_json(404, {"error": {"code": "not_found", "message": "endpoint not found"}})
             return
 
@@ -66,7 +67,8 @@ class EngineHTTPHandler(BaseHTTPRequestHandler):
             payload = json.loads(raw.decode("utf-8"))
             if not isinstance(payload, dict):
                 raise ValueError("request body must be a JSON object")
-            response = self._get_service().handle_payload(payload)
+            service = self._get_service()
+            response = service.handle_trace_payload(payload) if self.path == TRACE_PATH else service.handle_payload(payload)
         except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
             self._send_json(400, {"error": {"code": "invalid_request", "message": str(exc)}})
             return

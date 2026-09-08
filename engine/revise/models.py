@@ -50,6 +50,11 @@ class EvaluationProfile:
     external_verification: tuple[str, ...] = ()
     llm_evaluators: tuple[str, ...] = ()
     evidence_requirements: tuple[str, ...] = ()
+    dimension_weights: dict[str, float] = field(default_factory=dict)
+    minimum_scores: dict[str, float] = field(default_factory=dict)
+    required_dimensions: tuple[str, ...] = ()
+    minimum_confidence: float = 0.60
+    minimum_overall_score: float = 0.75
     evaluation_effort: str = "medium"
     max_revisions: int = 1
     max_verification_steps: int = 2

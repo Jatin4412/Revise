@@ -15,7 +15,13 @@ def decide(
     if contract.missing_context:
         return _with_decision(result, Decision.ASK)
 
-    # Safety/security/critical failures remain hard stops. Model confidence cannot override them.
+    # Configured hard gates are authoritative. A matching issue blocks acceptance
+    # regardless of its model-assigned severity or overall score.
+    if any(issue.type in profile.hard_gates for issue in result.issues):
+        return _next_action(result, profile, revisions_used)
+
+    # Critical/major/moderate issues remain material failures even when no explicit
+    # hard-gate selector was configured.
     material = [
         issue
         for issue in result.issues

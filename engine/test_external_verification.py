@@ -37,20 +37,20 @@ class ExternalVerificationTests(unittest.TestCase):
     def test_reachable_source_passes(self):
         fetcher = FakeFetcher({"https://example.com/source": (200, "https://example.com/source", "text/html; charset=utf-8")})
         verifier = SourceVerifier(fetcher=fetcher)
-        result = verifier.verify(self.contract(), "Source: https://example.com/source", EvaluationProfile(dimensions=()))
+        result = verifier.verify(self.contract(), "Source: https://example.com/source", EvaluationProfile(dimensions=("correctness",)))
         self.assertEqual(result[0].result, "pass")
         self.assertIn("status:200", result[0].provenance)
 
     def test_unavailable_source_fails(self):
         fetcher = FakeFetcher({"https://example.com/missing": (404, "https://example.com/missing", "text/html")})
         verifier = SourceVerifier(fetcher=fetcher)
-        result = verifier.verify(self.contract(), "Source: https://example.com/missing", EvaluationProfile(dimensions=()))
+        result = verifier.verify(self.contract(), "Source: https://example.com/missing", EvaluationProfile(dimensions=("correctness",)))
         self.assertEqual(result[0].result, "fail")
         self.assertIn("status:404", result[0].provenance)
 
     def test_required_citations_fail_when_none_are_present(self):
         verifier = SourceVerifier(fetcher=FakeFetcher({}))
-        result = verifier.verify(self.contract(), "Here is a research answer without links.", EvaluationProfile(dimensions=()))
+        result = verifier.verify(self.contract(), "Here is a research answer without links.", EvaluationProfile(dimensions=("correctness",)))
         self.assertEqual(result[0].result, "fail")
         self.assertIn("citation_required", result[0].provenance)
 
@@ -59,7 +59,7 @@ class ExternalVerificationTests(unittest.TestCase):
         fetcher = FakeFetcher({url: (200, url, "text/html") for url in urls})
         verifier = SourceVerifier(fetcher=fetcher, max_sources=4)
         response = " ".join(urls[:2] + urls[:4])
-        result = verifier.verify(self.contract(), response, EvaluationProfile(dimensions=()))
+        result = verifier.verify(self.contract(), response, EvaluationProfile(dimensions=("correctness",)))
         self.assertEqual(len(result), 4)
         self.assertEqual(len(fetcher.calls), 4)
         self.assertEqual(len({call[0] for call in fetcher.calls}), 4)
@@ -67,7 +67,7 @@ class ExternalVerificationTests(unittest.TestCase):
     def test_fetch_error_becomes_external_failure(self):
         fetcher = FakeFetcher({"https://example.com/down": RuntimeError("offline")})
         verifier = SourceVerifier(fetcher=fetcher)
-        result = verifier.verify(self.contract(), "Source: https://example.com/down", EvaluationProfile(dimensions=()))
+        result = verifier.verify(self.contract(), "Source: https://example.com/down", EvaluationProfile(dimensions=("correctness",)))
         self.assertEqual(result[0].result, "fail")
         self.assertIn("fetch_error:RuntimeError", result[0].provenance)
 
@@ -82,6 +82,14 @@ class ExternalVerificationTests(unittest.TestCase):
             registry={"source_verification": SourceVerifier(fetcher=fetcher)},
         )
         self.assertTrue(any(item.method == "external" and item.result == "pass" for item in evidence))
+
+    def test_missing_configured_external_verifier_fails_closed(self):
+        contract = self.contract()
+        profile = build_profile(contract)
+        evidence = run_external_verifiers(contract, "https://example.com/source", profile, registry={})
+        self.assertEqual(len(evidence), 1)
+        self.assertEqual(evidence[0].result, "fail")
+        self.assertIn("verifier_unavailable:source_verification", evidence[0].provenance)
 
     def test_external_failure_blocks_acceptance(self):
         profile = EvaluationProfile(

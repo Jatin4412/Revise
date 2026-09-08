@@ -8,6 +8,7 @@ from .providers import Primary, Secondary, Verifier
 from .revise.decision import decide
 from .revise.evaluator import evaluate
 from .revise.evidence import fuse_evidence
+from .revise.external import run_external_verifiers
 from .revise.models import Decision, EvaluationProfile, EvaluationResult, Evidence, TaskContract, Version
 from .revise.profile import build_profile
 from .revise.revision import RevisionAssessment, assess_revision
@@ -142,6 +143,10 @@ class Engine:
         if profile.deterministic_checks:
             self._emit(trace, "verifier", "deterministic_complete", checks=",".join(profile.deterministic_checks), evidence=len(deterministic_evidence))
 
+        external_evidence = run_external_verifiers(contract, response, profile)
+        if profile.external_verification:
+            self._emit(trace, "verifier", "external_complete", checks=",".join(profile.external_verification), evidence=len(external_evidence))
+
         verifier_evidence = ()
         if self.verifier is not None:
             self._emit(trace, "verifier", "start", verifier=type(self.verifier).__name__)
@@ -152,7 +157,7 @@ class Engine:
                 raise
             self._emit(trace, "verifier", "complete", verifier=type(self.verifier).__name__, evidence=len(verifier_evidence))
 
-        fused = fuse_evidence((*base.evidence, *evidence, *deterministic_evidence, *verifier_evidence))
+        fused = fuse_evidence((*base.evidence, *evidence, *deterministic_evidence, *external_evidence, *verifier_evidence))
         result = EvaluationResult(
             decision=base.decision,
             overall_score=base.overall_score,

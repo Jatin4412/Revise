@@ -48,20 +48,36 @@ class EngineTests(unittest.TestCase):
 
     def test_revision_context_reaches_primary(self) -> None:
         primary = SequencePrimary(["incomplete", "complete answer"])
-        result = Engine(primary, secondary=BasicSecondary()).run(TaskContract(goal="complete the task"), profile=EvaluationProfile(dimensions=("task_completion",), max_revisions=1))
+        result = Engine(primary, secondary=BasicSecondary()).run(
+            TaskContract(goal="complete the task"),
+            profile=EvaluationProfile(
+                dimensions=("task_completion",),
+                minimum_scores={"task_completion": 0.70},
+                max_revisions=1,
+            ),
+        )
         self.assertEqual(result.decision.value, "accept")
         self.assertEqual(result.final_version.response, "complete answer")
         self.assertEqual(len(result.versions), 2)
-        self.assertIn("incomplete", primary.contexts[1])
-        self.assertIn("response is incomplete", primary.contexts[1])
+        self.assertIsNotNone(primary.contexts[1])
+        self.assertIn("incomplete", primary.contexts[1] or "")
+        self.assertIn("response is incomplete", primary.contexts[1] or "")
 
     def test_trace_records_revision_and_final_decision(self) -> None:
-        result = Engine(SequencePrimary(["incomplete", "complete answer"]), secondary=BasicSecondary()).run(TaskContract(goal="complete the task"), profile=EvaluationProfile(dimensions=("task_completion",), max_revisions=1))
+        result = Engine(SequencePrimary(["incomplete", "complete answer"]), secondary=BasicSecondary()).run(
+            TaskContract(goal="complete the task"),
+            profile=EvaluationProfile(
+                dimensions=("task_completion",),
+                minimum_scores={"task_completion": 0.70},
+                max_revisions=1,
+            ),
+        )
         events = [(event.stage, event.status) for event in result.trace]
         self.assertIn(("primary", "start"), events)
         self.assertIn(("secondary", "start"), events)
         self.assertIn(("evaluation", "dimension"), events)
         self.assertIn(("decision", "revise"), events)
+        self.assertIn(("revision", "requested"), events)
         self.assertIn(("decision", "accept"), events)
         self.assertEqual(result.trace[-1].stage, "final")
 
@@ -91,6 +107,8 @@ class EngineTests(unittest.TestCase):
         secondary = SecondaryRouter({"fake": lambda model: ("secondary", model)}, default=ModelSelection("fake", "light"))
         self.assertEqual(primary.resolve().model, "strong")
         self.assertEqual(secondary.resolve().model, "light")
+        self.assertEqual(primary.selection().model, "strong")
+        self.assertEqual(secondary.selection().model, "light")
 
     def test_llm_secondary_parses_candidate_evaluation(self) -> None:
         seen: list[str] = []

@@ -60,18 +60,21 @@ def assess_revision(baseline: EvaluationResult | None, revised: EvaluationResult
 
     improved: list[str] = []
     regressed: list[str] = []
-    for name in set(baseline.dimensions) | set(revised.dimensions):
+    baseline_dimension_names = set(baseline.dimensions)
+    revised_dimension_names = set(revised.dimensions)
+    for name in sorted(baseline_dimension_names | revised_dimension_names):
         before = baseline.dimensions.get(name)
         after = revised.dimensions.get(name)
-        if before is None or after is None:
+        if before is None:
+            continue
+        if after is None:
+            # Losing a previously evaluated dimension makes its quality unknown.
+            regressed.append(name)
             continue
         if _dimension_improved(before, after):
             improved.append(name)
         elif _dimension_regressed(before, after):
             regressed.append(name)
-
-    improved.sort()
-    regressed.sort()
 
     net_improvement = score_delta
     material_introduced = any(revised_issues[key].severity in _MATERIAL_SEVERITIES for key in introduced)
@@ -112,7 +115,9 @@ def assess_revision(baseline: EvaluationResult | None, revised: EvaluationResult
 
 def _issue_key(issue: Issue) -> str:
     """Identify the same issue across revisions without encoding its changing severity."""
-    return f"{issue.type}|{issue.location or ''}|{issue.description.strip().lower()}"
+    normalized_description = " ".join(issue.description.split()).lower()
+    normalized_location = " ".join((issue.location or "").split()).lower()
+    return f"{issue.type.strip().lower()}|{normalized_location}|{normalized_description}"
 
 
 def _dimension_improved(before, after) -> bool:

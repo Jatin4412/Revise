@@ -40,6 +40,7 @@ class TaskContract:
     assumptions: tuple[str, ...] = ()
     success_criteria: tuple[str, ...] = ()
     verification_requirements: tuple[str, ...] = ()
+    output_schema: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)

@@ -30,17 +30,25 @@ class ModelRouter:
         self._providers = dict(providers)
         self.default = default
 
-    def resolve(self, selection: ModelSelection | None = None) -> Primary:
+    def resolve(self, selection: ModelSelection | None = None) -> ModelSelection:
+        """Validate and return the selected runtime model descriptor.
+
+        Adapters can be resolved separately by service/runtime code; the router's
+        core contract remains a model selection, not a provider-specific adapter.
+        """
         selected = selection or self.default
         if selected is None:
             raise ValueError("a model selection is required")
-        factory = self._providers.get(selected.provider)
-        if factory is None:
+        if selected.provider not in self._providers:
             available = ", ".join(sorted(self._providers)) or "none"
             raise ValueError(
                 f"unsupported model provider: {selected.provider}; available: {available}"
             )
-        return factory(selected.model)
+        return selected
+
+    def adapter(self, selection: ModelSelection | None = None) -> Primary:
+        selected = self.resolve(selection)
+        return self._providers[selected.provider](selected.model)
 
     def available_providers(self) -> tuple[str, ...]:
         return tuple(sorted(self._providers))
@@ -58,17 +66,20 @@ class SecondaryRouter:
         self._providers = dict(providers)
         self.default = default
 
-    def resolve(self, selection: ModelSelection | None = None) -> Secondary:
+    def resolve(self, selection: ModelSelection | None = None) -> ModelSelection:
         selected = selection or self.default
         if selected is None:
             raise ValueError("a secondary model selection is required")
-        factory = self._providers.get(selected.provider)
-        if factory is None:
+        if selected.provider not in self._providers:
             available = ", ".join(sorted(self._providers)) or "none"
             raise ValueError(
                 f"unsupported secondary model provider: {selected.provider}; available: {available}"
             )
-        return factory(selected.model)
+        return selected
+
+    def adapter(self, selection: ModelSelection | None = None) -> Secondary:
+        selected = self.resolve(selection)
+        return self._providers[selected.provider](selected.model)
 
     def available_providers(self) -> tuple[str, ...]:
         return tuple(sorted(self._providers))

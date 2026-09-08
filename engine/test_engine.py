@@ -8,7 +8,9 @@ from unittest.mock import patch
 from engine import Engine, EngineRequest, EngineService, FunctionPrimary
 from engine.llm import LLMSecondary, _groq_callable
 from engine.model import ModelRouter, ModelSelection, SecondaryRouter
-from engine.revise.models import DimensionResult, EvaluationProfile, Mode, TaskContract
+from engine.revise.decision import decide
+from engine.revise.evaluator import evaluate
+from engine.revise.models import Decision, DimensionResult, EvaluationProfile, EvaluationResult, Mode, TaskContract
 
 
 class SequencePrimary:
@@ -165,6 +167,73 @@ class EngineTests(unittest.TestCase):
                 os.environ.pop("GROQ_API_KEY", None)
             else:
                 os.environ["GROQ_API_KEY"] = previous
+
+    def test_evaluation_uses_profile_weights(self) -> None:
+        contract = TaskContract(goal="weighted task")
+        profile = EvaluationProfile(
+            dimensions=("correctness", "clarity"),
+            dimension_weights={"correctness": 2.0, "clarity": 1.0},
+        )
+        evaluators = {
+            "correctness": lambda _c, _r: DimensionResult(1.0, 1.0, "pass", "correct"),
+            "clarity": lambda _c, _r: DimensionResult(0.0, 1.0, "pass", "unclear"),
+        }
+        result = evaluate(contract, "answer", profile, evaluators)
+
+        self.assertAlmostEqual(result.overall_score, 2 / 3)
+
+    def test_partial_dimension_cannot_be_accepted(self) -> None:
+        result = EvaluationResult(
+            decision=Decision.ACCEPT,
+            overall_score=0.95,
+            confidence=1.0,
+            dimensions={"correctness": DimensionResult(0.95, 1.0, "partial", "some uncertainty")},
+        )
+        profile = EvaluationProfile(dimensions=("correctness",), max_revisions=1)
+
+        decided = decide(TaskContract(goal="task"), profile, result, revisions_used=0)
+        self.assertEqual(decided.decision, Decision.REVISE)
+
+    def test_low_confidence_cannot_be_accepted(self) -> None:
+        result = EvaluationResult(
+            decision=Decision.ACCEPT,
+            overall_score=0.95,
+            confidence=0.40,
+            dimensions={"correctness": DimensionResult(0.95, 0.40, "pass", "low confidence")},
+        )
+        profile = EvaluationProfile(dimensions=("correctness",), required_dimensions=("correctness",), max_revisions=1)
+
+        decided = decide(TaskContract(goal="task"), profile, result, revisions_used=0)
+        self.assertEqual(decided.decision, Decision.ASK)
+
+    def test_below_dimension_floor_requests_revision(self) -> None:
+        result = EvaluationResult(
+            decision=Decision.ACCEPT,
+            overall_score=0.80,
+            confidence=1.0,
+            dimensions={"correctness": DimensionResult(0.60, 1.0, "pass", "weak")},
+        )
+        profile = EvaluationProfile(
+            dimensions=("correctness",),
+            minimum_scores={"correctness": 0.70},
+            required_dimensions=("correctness",),
+            max_revisions=1,
+        )
+
+        decided = decide(TaskContract(goal="task"), profile, result, revisions_used=0)
+        self.assertEqual(decided.decision, Decision.REVISE)
+
+    def test_below_overall_floor_requests_revision(self) -> None:
+        result = EvaluationResult(
+            decision=Decision.ACCEPT,
+            overall_score=0.60,
+            confidence=1.0,
+            dimensions={"correctness": DimensionResult(0.60, 1.0, "pass", "weak")},
+        )
+        profile = EvaluationProfile(dimensions=("correctness",), minimum_overall_score=0.75, max_revisions=1)
+
+        decided = decide(TaskContract(goal="task"), profile, result, revisions_used=0)
+        self.assertEqual(decided.decision, Decision.REVISE)
 
 
 if __name__ == "__main__":

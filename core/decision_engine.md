@@ -44,7 +44,7 @@ A provider may be used for both roles, but role configuration remains separate s
 3. Check required task completion and correctness.
 4. Apply task-specific quality dimensions and evidence.
 5. Treat unknown or unavailable evaluation as non-passing; do not claim an unevaluated candidate is verified.
-6. Prefer deterministic and external evidence when it can directly verify a property.
+6. Prefer deterministic and external evidence when it can directly verify a property. A deterministic `fail` cannot be overridden by an LLM/model `pass`.
 7. For revisions, compare against the immediately previous evaluated version; require material quality improvement, resolved relevant issues, or both.
 8. Treat regressions or unchanged revisions as non-acceptable and continue within the revision budget; when no budget remains, `ASK` and retain the best valid version.
 9. Respect revision and verification budgets.

@@ -7,7 +7,7 @@
 - Own engine implementation and engine foundation only.
 - Do not modify `web/` unless explicitly authorized.
 - Preserve the provider-agnostic architecture; provider/model selection is runtime configuration, not core decision policy.
-- Primary and Secondary are roles, not fixed model identities.
+- Primary, Secondary, and Verifier are roles, not fixed model identities.
 
 ## Core objective
 Build an evaluation-driven answer/revision engine that generates, independently evaluates, verifies where deterministic evidence exists, revises when necessary, and retains the best valid result.
@@ -35,14 +35,16 @@ User -> Task Contract -> Mode/Profile -> Model Router -> Primary
 12. More words do not mean better output.
 
 ## Current implementation
-- Task contracts/state, modes, adaptive evaluation profiles, evidence fusion, decision engine, bounded revision loop, versioning, and best-version selection exist.
+- Task contracts/state, Lite/Basic/Pro/Auto modes, adaptive evaluation profiles, evidence fusion, decision engine, bounded revision loop, versioning, and best-version selection exist.
 - Provider-neutral Primary/Secondary/Verifier protocols exist.
 - Runtime adapters currently support Gemini, Groq, OpenRouter, OpenAI, and Grok.
 - Ollama is intentionally not part of the current testing/selector setup.
 - Structured Secondary evaluation exists.
 - HTTP boundary is stable: `GET /health`, `POST /v1/engine`, success `{text, decision, version_id}`, generic error `{error:{code,message}}`.
 - Phase A execution observability is complete: structured trace records request, contract/profile, Primary, Secondary, per-dimension evaluation, verifier, decision, revisions, and final selection. Trace excludes prompts, responses, and credentials. Console trace is enabled for the local default service.
-- Local end-to-end runtime has been verified for Gemini 3.1 Flash-Lite, OpenRouter Free, and Groq GPT-OSS 120B. Gemini 3.7 Flash has also completed the full pipeline on retry; earlier 503/high-demand responses were transient provider availability.
+- Local end-to-end runtime has been verified for Gemini 3.1 Flash-Lite, OpenRouter Free, Groq GPT-OSS 120B, and Gemini 3.7 Flash after retry.
+- Phase C deterministic verification primitives now exist in `engine/revise/verifiers.py`: arithmetic consistency checks, Python AST syntax checks without execution, and JSON syntax checks. Profiles select only relevant deterministic checks, and the engine fuses their evidence with Secondary/custom verifier evidence before decision policy.
+- Phase C deliberately does not execute arbitrary generated code; safe compiler/test execution remains a future bounded verifier capability.
 
 ## Current model/runtime policy
 - Default Primary: `gemini / gemini-3.7-flash`.
@@ -55,7 +57,7 @@ User -> Task Contract -> Mode/Profile -> Model Router -> Primary
 
 ## Provider testing status
 - Primary-only matrix: 4 providers x 3 prompts completed with 2 transient failures on Gemini 3.7 Flash; Gemini 3.1, Groq, and OpenRouter were 3/3.
-- Full-pipeline matrix: 4 providers x 3 prompts completed with 0 failures. Each exercised Primary -> Gemini 3.1 Secondary -> evaluation -> decision -> final selection.
+- Full-pipeline matrix: 4 providers x 3 prompts completed with 0 failures.
 - Current provider testing is considered green; transient Gemini capacity errors are treated as provider availability rather than engine defects.
 
 ## Phase B — Strengthened evaluation (implemented)
@@ -64,28 +66,25 @@ User -> Task Contract -> Mode/Profile -> Model Router -> Primary
 - Default dimension floor is 0.70, required core task dimensions are goal alignment, task completion, correctness, and instruction following, minimum confidence is 0.60, and minimum overall score is 0.75.
 - Evaluation computes a weighted overall score instead of an unweighted average.
 - Decision policy rejects unknown, partial, failing, low-floor, low-confidence, and below-overall-threshold evaluations; material issues still trigger revision or ask according to revision budget.
-- Revision feedback now includes dimension status/score/confidence/reason in addition to explicit issues and revision instructions. This fixes loss of Secondary diagnosis when no structured issue item is emitted.
+- Revision feedback includes dimension status/score/confidence/reason in addition to explicit issues and revision instructions.
 - Model router preserves `resolve()` as adapter resolution and exposes `selection()` separately for runtime selection descriptors.
 - Tests cover weighted scoring, partial-result rejection, low-confidence rejection, dimension-floor revision, overall-floor revision, revision context propagation, trace revision flow, and role-independent model routing.
 
-## Current validation status
-- User-side test run reached 14/15 passing.
-- The remaining failure was traced to a genuine context propagation gap: the evaluator returned a dimension-level reason but no issue, and revision context only included issue descriptions/revision instructions.
-- The engine fix was committed to `main` as `e886360` and adds dimension feedback to revision context without exposing response payloads in trace.
-- Re-run `python -m unittest engine.test_engine -v` after synchronization. Expected result: all current engine regression tests pass.
+## Phase C — Deterministic verification (implemented baseline)
+- Added a provider-neutral deterministic verifier registry.
+- Math-like tasks can select arithmetic consistency verification.
+- Python tasks can select AST syntax verification without executing generated code.
+- JSON-formatted tasks can select JSON syntax verification.
+- Deterministic evidence is fused with Secondary/custom verifier evidence and therefore participates in the existing evidence-precedence model.
+- Trace records deterministic verifier completion without storing candidate response payloads.
+- Regression tests cover wrong arithmetic, Python syntax checking, JSON syntax checking, and profile selection.
+- Safe runtime code tests, richer schema validation, citation/source verification, and broader external evidence remain follow-up work rather than being faked as complete.
 
 ## Current roadmap
-### Phase B follow-up
-- Add deliberate adversarial/incomplete candidate tests against the real LLM Secondary.
-- Refine task-specific profile selection beyond keyword detection.
-- Add explicit hard-gate dimension semantics for safety/security/critical constraints.
-
-### Phase C — Deterministic verification
-- Math -> deterministic checking.
-- Code -> safe tests/compiler/static checks where appropriate.
-- Structured output -> schema validation.
-- Citations/sources -> source verification.
-- Other externally verifiable claims -> evidence/retrieval as appropriate.
+### Phase C follow-up
+- Add richer schema validation when the task contract can carry an explicit schema.
+- Add safe, sandboxed code tests/compiler checks where infrastructure permits.
+- Add citation/source verification and other external evidence adapters.
 
 ### Phase D — Revision quality
 Require revisions to materially improve task success or resolve relevant issues; track baseline quality, revision quality, resolved/introduced issues, and net improvement.

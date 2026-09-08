@@ -124,45 +124,57 @@ Use task-specific subsets rather than blindly running every dimension.
 - Local `.env` loading exists for engine startup/import.
 - End-to-end local runtime has been verified: Primary generation + Secondary evaluation + decision returned `accept` for `what is 2+2`.
 - HTTP integration has also been verified after fixing the handler service-factory binding issue.
+- **Phase A structured execution observability is implemented:** `ExecutionTrace` / `TraceEvent` record request, contract, profile, Primary, Secondary, evaluation dimensions, verifier, decisions, revisions, and final selection.
+- Runtime trace is safe by default: prompts, responses, credentials, and other payload contents are not placed in trace events.
+- Default HTTP engine service now emits concise developer-facing trace lines to the Python server terminal.
+- `EngineResult.trace` exposes the structured trace to engine callers without changing the stable HTTP response contract.
+- Runtime provider/model selections are attached to resolved role components for trace labeling where the component supports metadata.
 
 ### Current known limitations / gaps
 
+- Phase A needs local runtime verification after the latest changes; the next test must confirm the Python terminal visibly shows the Primary -> Secondary -> evaluation -> decision sequence.
 - The Verifier protocol/evidence path exists, but the default runtime does not yet configure substantive deterministic verifiers.
 - Mathematical, code, schema, citation, and similar checks still need stronger deterministic verification where appropriate rather than relying primarily on Secondary.
 - Revision quality is not yet enforced with a strong explicit improvement criterion; the loop exists, but improvement-over-baseline should become a first-class decision signal.
-- Runtime execution is currently not exposed through a structured trace/logging layer. Terminal traceback exists for unexpected HTTP errors, but this is not the desired engine observability system.
 - Evaluation scoring/thresholds can be strengthened so that weak or overly permissive Secondary judgments cannot pass simply because all requested dimensions are nominally marked pass.
 - Current profile selection uses lightweight task-text heuristics; this should evolve carefully without weakening explicit user mode semantics.
 
 ## Current roadmap / active plan
 
-### Phase A — Execution observability (NEXT)
+### Phase A — Execution observability (IMPLEMENTED; VERIFY NOW)
 
-Build a first-class structured execution trace for every engine run. It should capture, at minimum:
+Implemented a first-class structured execution trace for every engine run. It captures, at minimum:
 
 - request / mode
 - task contract creation
 - evaluation profile and selected dimensions
-- Primary invocation: role/provider/model, start/end, version ID, success/failure
-- Secondary invocation: role/provider/model, start/end, success/failure
-- per-dimension evaluation status/score/confidence/reason
-- issues and revision instructions
-- verifier invocations and evidence
-- decision taken and why
-- revision number / parent version
+- Primary invocation: role/provider/model, version ID, success/failure, revision number
+- Secondary invocation: role/provider/model, success/failure
+- per-dimension evaluation status/score/confidence
+- issue/revision-guidance counts
+- verifier invocations and evidence counts
+- decision taken
+- revision request and parent/next version
 - final selected version
 
-Provide clean developer/runtime logging derived from the trace, e.g.:
+Developer/runtime output is derived from the trace and looks like:
 
 ```text
-[time] PRIMARY -> provider/model
-[time] PRIMARY OK -> v0
-[time] SECONDARY -> provider/model
-[time] SECONDARY OK -> evaluation complete
-[time] DECISION -> ACCEPT
+[time] REQUEST RECEIVED | mode=basic
+[time] CONTRACT CREATED | requirements=0 constraints=0
+[time] PROFILE SELECTED | dimensions=... effort=medium max_revisions=1 ...
+[time] PRIMARY START | provider=gemini model=... version=v0 revision=0
+[time] PRIMARY COMPLETE | provider=gemini model=... version=v0
+[time] SECONDARY START | provider=gemini model=...
+[time] SECONDARY COMPLETE | provider=gemini model=...
+[time] EVALUATION DIMENSION | name=correctness status=pass score=... confidence=...
+[time] DECISION ACCEPT | version=v0 ...
+[time] FINAL SELECTED | version=v0 decision=accept
 ```
 
-Do not expose raw secrets or full prompts/responses by default. Keep the existing HTTP success/error contract stable.
+The trace must remain observational: failures in the logging sink must never change engine correctness. The stable HTTP contract remains unchanged.
+
+**Immediate verification:** restart the local Python server, send a request, and confirm the terminal trace. Then test a case that actually triggers a revision so `v0 -> REVISE -> v1 -> ACCEPT` can be observed.
 
 ### Phase B — Strengthen evaluation
 
@@ -227,7 +239,7 @@ Engine internals should not leak into this contract. Future streaming/status/tra
 
 ## Verified runtime state
 
-As of the latest working test:
+Before Phase A observability changes:
 
 ```text
 Local Python engine: working
@@ -240,6 +252,8 @@ UI -> HTTP -> Engine integration: verified
 ```
 
 The basic `2+2` request correctly returned `2 + 2 = 4`, `accept`, `v0`.
+
+After Phase A code changes, functional behavior has not yet been re-run in this environment. The next required verification is local restart + request + terminal trace, followed by a forced revision test.
 
 ## Working procedure for this agent
 
@@ -255,4 +269,4 @@ Before making a substantive engine decision or implementation change:
 
 ## Immediate next action
 
-**Do not start another UI redesign or provider migration.** The next engine task is to implement **Phase A: structured execution observability**, then use the resulting trace to verify that Primary -> Secondary -> evaluation -> decision -> revision behavior is actually occurring as designed.
+**Verify Phase A locally.** Restart `python -m engine --serve`, send a normal request, inspect the terminal trace, and then exercise a request that produces a revision so the trace demonstrates the real bounded loop. Only after this verification should Phase A be marked complete and Phase B begin.

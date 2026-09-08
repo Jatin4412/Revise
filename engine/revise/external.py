@@ -60,9 +60,11 @@ class SourceVerifier:
             if _requires_citations(contract):
                 return (Evidence("external.source_verification", "external", "fail", 1.0, ("citation_required", "no_http_sources_found")),)
             return ()
+
         limit = self.max_sources if max_sources is None else max(0, min(self.max_sources, max_sources))
         evidence: list[Evidence] = []
-        for url in urls[:limit]:
+        checked = min(len(urls), limit)
+        for url in urls[:checked]:
             try:
                 status, final_url, content_type = self.fetcher.fetch(url, timeout=self.timeout, max_bytes=self.max_bytes)
             except (RuntimeError, ValueError, OSError, socket.gaierror) as exc:
@@ -70,11 +72,14 @@ class SourceVerifier:
                 continue
             result = "pass" if 200 <= status < 400 else "fail"
             provenance = (f"url:{url}", f"status:{status}")
-            if final_url != url: provenance += (f"final_url:{final_url}",)
-            if content_type: provenance += (f"content_type:{content_type.split(';', 1)[0].strip().lower()}",)
+            if final_url != url:
+                provenance += (f"final_url:{final_url}",)
+            if content_type:
+                provenance += (f"content_type:{content_type.split(';', 1)[0].strip().lower()}",)
             evidence.append(Evidence("external.source_verification", "external", result, 1.0, provenance))
+
         if len(urls) > limit:
-            evidence.append(Evidence("external.source_verification", "external", "fail", 1.0, ("source_limit_exhausted", f"sources_available:{len(urls)}", f"sources_checked:{limit}")))
+            evidence.append(Evidence("external.source_verification", "external", "fail", 1.0, ("source_limit_exhausted", f"sources_available:{len(urls)}", f"sources_checked:{checked}")))
         return tuple(evidence)
 
 
@@ -96,11 +101,11 @@ def run_external_verifiers(contract: TaskContract, response: str, profile: Evalu
 
 
 def _extract_urls(response: str) -> tuple[str, ...]:
-    # Preserve first-seen URL order and deduplicate repeated citations.
     found: list[str] = []
     for raw in _URL_RE.findall(response):
         url = raw.rstrip(".,;:!?)]}")
-        if url not in found: found.append(url)
+        if url not in found:
+            found.append(url)
     return tuple(found)
 
 
@@ -117,7 +122,8 @@ def _validate_public_url(url: str):
         addresses = {item[4][0] for item in socket.getaddrinfo(parsed.hostname, None, type=socket.SOCK_STREAM)}
     except socket.gaierror as exc:
         raise ValueError("source hostname could not be resolved") from exc
-    if not addresses: raise ValueError("source hostname has no resolved address")
+    if not addresses:
+        raise ValueError("source hostname has no resolved address")
     for address in addresses:
         ip = ipaddress.ip_address(address)
         if any((ip.is_private, ip.is_loopback, ip.is_link_local, ip.is_reserved, ip.is_multicast, ip.is_unspecified)):

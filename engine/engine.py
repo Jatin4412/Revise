@@ -169,7 +169,7 @@ class Engine:
                 trace,
                 "revision",
                 "assessed",
-                status=revision_assessment.status,
+                revision_status=revision_assessment.status,
                 score_delta=revision_assessment.score_delta,
                 resolved_issues=len(revision_assessment.resolved_issues),
                 introduced_issues=len(revision_assessment.introduced_issues),

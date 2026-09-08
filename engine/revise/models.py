@@ -61,6 +61,32 @@ class EvaluationProfile:
     max_verification_steps: int = 2
     stopping_conditions: tuple[str, ...] = ()
 
+    def __post_init__(self) -> None:
+        dimension_set = set(self.dimensions)
+        if len(dimension_set) != len(self.dimensions):
+            raise ValueError("evaluation dimensions must be unique")
+        if any(not isinstance(name, str) or not name.strip() for name in self.dimensions):
+            raise ValueError("evaluation dimensions must be non-empty strings")
+        if any(name not in dimension_set for name in self.required_dimensions):
+            raise ValueError("required dimensions must be present in dimensions")
+        if any(name not in dimension_set for name in self.dimension_weights):
+            raise ValueError("dimension weights must reference configured dimensions")
+        if any(name not in dimension_set for name in self.minimum_scores):
+            raise ValueError("minimum scores must reference configured dimensions")
+        if any(not isinstance(weight, (int, float)) or weight < 0 for weight in self.dimension_weights.values()):
+            raise ValueError("dimension weights must be non-negative numbers")
+        for name, score in self.minimum_scores.items():
+            if not isinstance(score, (int, float)) or not 0 <= score <= 1:
+                raise ValueError(f"minimum score for {name} must be between 0 and 1")
+        if not 0 <= self.minimum_confidence <= 1:
+            raise ValueError("minimum confidence must be between 0 and 1")
+        if not 0 <= self.minimum_overall_score <= 1:
+            raise ValueError("minimum overall score must be between 0 and 1")
+        if not isinstance(self.max_revisions, int) or self.max_revisions < 0:
+            raise ValueError("max_revisions must be a non-negative integer")
+        if not isinstance(self.max_verification_steps, int) or self.max_verification_steps < 0:
+            raise ValueError("max_verification_steps must be a non-negative integer")
+
 
 @dataclass(frozen=True)
 class DimensionResult:

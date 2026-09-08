@@ -60,10 +60,15 @@ def assess_revision(baseline: EvaluationResult | None, revised: EvaluationResult
 
     improved: list[str] = []
     regressed: list[str] = []
-    for name in set(baseline.dimensions) | set(revised.dimensions):
+    baseline_dimension_names = set(baseline.dimensions)
+    revised_dimension_names = set(revised.dimensions)
+    for name in sorted(baseline_dimension_names | revised_dimension_names):
         before = baseline.dimensions.get(name)
         after = revised.dimensions.get(name)
-        if before is None or after is None:
+        if before is None:
+            continue
+        if after is None:
+            regressed.append(name)
             continue
         if _dimension_improved(before, after):
             improved.append(name)

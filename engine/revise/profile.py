@@ -13,7 +13,7 @@ _MATH_EXPRESSION_RE = re.compile(r"\d+(?:\s*(?:[+\-*/×÷])\s*\d+)+")
 
 def build_profile(contract: TaskContract) -> EvaluationProfile:
     dimensions = list(CORE)
-    text = " ".join((contract.goal, *contract.requirements, *contract.known_context)).lower()
+    text = " ".join((contract.goal, *contract.requirements, *contract.constraints, *contract.known_context, *contract.verification_requirements)).lower()
     deterministic_checks: list[str] = []
     external_verification: list[str] = []
     if any(k in text for k in ("code", "python", "program", "function", "implement")):

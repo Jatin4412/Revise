@@ -75,13 +75,15 @@ def _text_callable(provider: str, model: str | None, *, role: str) -> Callable[[
     provider = provider.strip().lower()
     if provider == "gemini":
         return _gemini_callable(model, role=role)
+    if provider == "groq":
+        return _groq_callable(model, role=role)
+    if provider == "openrouter":
+        return _openrouter_callable(model, role=role)
     if provider == "openai":
         return _openai_callable(model, role=role)
     if provider == "grok":
         return _xai_callable(model, role=role)
-    if provider == "ollama":
-        return _ollama_callable(model, role=role)
-    raise ValueError(f"unsupported model provider: {provider}; available: gemini, grok, ollama, openai")
+    raise ValueError(f"unsupported model provider: {provider}; available: gemini, groq, openrouter, grok, openai")
 
 
 def _gemini_callable(model: str | None, *, role: str) -> Callable[[str], str]:
@@ -103,6 +105,22 @@ def _gemini_callable(model: str | None, *, role: str) -> Callable[[str], str]:
         return _extract_gemini_text(body)
 
     return call
+
+
+def _groq_callable(model: str | None, *, role: str) -> Callable[[str], str]:
+    key = os.environ.get("GROQ_API_KEY")
+    selected = model or os.environ.get(f"GROQ_{role.upper()}_MODEL") or os.environ.get("GROQ_MODEL") or "openai/gpt-oss-120b"
+    if not key:
+        raise RuntimeError("GROQ_API_KEY is required for the Groq provider")
+    return _chat_completions_callable("Groq", "https://api.groq.com/openai/v1/chat/completions", key, selected)
+
+
+def _openrouter_callable(model: str | None, *, role: str) -> Callable[[str], str]:
+    key = os.environ.get("OPENROUTER_API_KEY")
+    selected = model or os.environ.get(f"OPENROUTER_{role.upper()}_MODEL") or os.environ.get("OPENROUTER_MODEL") or "openrouter/free"
+    if not key:
+        raise RuntimeError("OPENROUTER_API_KEY is required for the OpenRouter provider")
+    return _chat_completions_callable("OpenRouter", "https://openrouter.ai/api/v1/chat/completions", key, selected)
 
 
 def _openai_callable(model: str | None, *, role: str) -> Callable[[str], str]:
@@ -133,24 +151,22 @@ def _responses_callable(provider: str, endpoint: str, key: str, model: str) -> C
     return call
 
 
-def _ollama_callable(model: str | None, *, role: str) -> Callable[[str], str]:
-    selected = model or os.environ.get(f"OLLAMA_{role.upper()}_MODEL") or os.environ.get("OLLAMA_MODEL")
-    endpoint = os.environ.get("OLLAMA_ENDPOINT", "http://localhost:11434").rstrip("/")
-    if not selected:
-        raise RuntimeError(f"OLLAMA_{role.upper()}_MODEL or an explicit model is required for the Ollama provider")
-
+def _chat_completions_callable(provider: str, endpoint: str, key: str, model: str) -> Callable[[str], str]:
     def call(prompt: str) -> str:
         body = _post_json(
-            f"{endpoint}/api/chat",
-            {"model": selected, "messages": [{"role": "user", "content": prompt}], "stream": False},
-            {},
-            120.0,
-            "Ollama",
+            endpoint,
+            {"model": model, "messages": [{"role": "user", "content": prompt}], "stream": False},
+            {"Authorization": f"Bearer {key}"},
+            60.0,
+            provider,
         )
-        message = body.get("message", {})
+        choices = body.get("choices", [])
+        if not isinstance(choices, list) or not choices:
+            raise RuntimeError(f"{provider} response did not contain choices")
+        message = choices[0].get("message", {}) if isinstance(choices[0], dict) else {}
         text = message.get("content") if isinstance(message, dict) else None
         if not isinstance(text, str) or not text.strip():
-            raise RuntimeError("Ollama response did not contain output text")
+            raise RuntimeError(f"{provider} response did not contain output text")
         return text.strip()
 
     return call

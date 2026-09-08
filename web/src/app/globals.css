@@ -38,8 +38,38 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid rgba(255,255,2
 .message-avatar { width: 29px; height: 29px; flex: 0 0 29px; display: grid; place-items: center; border-radius: 8px; background: #202227; color: #aeb0b5; font-size: 8px; font-weight: 700; }
 .message-assistant .message-avatar { background: #17191d; border: 1px solid rgba(255,255,255,.1); color: #d1d2d5; }
 .message-body { padding-top: 4px; color: #e4e4e6; font-size: 14px; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
+.message-user .message-body { white-space: pre-wrap; }
 .message-thinking { color: #8d9096; }
 .message-error { color: #b4b5b9; }
+
+.markdown-content { min-width: 0; }
+.markdown-content > :first-child { margin-top: 0; }
+.markdown-content > :last-child { margin-bottom: 0; }
+.markdown-content p { margin: 0 0 14px; }
+.markdown-content h1,
+.markdown-content h2,
+.markdown-content h3,
+.markdown-content h4 { margin: 24px 0 10px; color: #f0f0f1; line-height: 1.3; letter-spacing: -.025em; }
+.markdown-content h1 { font-size: 24px; }
+.markdown-content h2 { font-size: 20px; }
+.markdown-content h3 { font-size: 17px; }
+.markdown-content h4 { font-size: 15px; }
+.markdown-content strong { color: #f1f1f2; font-weight: 650; }
+.markdown-content em { font-style: italic; }
+.markdown-content ul,
+.markdown-content ol { margin: 0 0 16px; padding-left: 25px; }
+.markdown-content li { margin: 5px 0; padding-left: 2px; }
+.markdown-content li > p { margin-bottom: 6px; }
+.markdown-content blockquote { margin: 16px 0; padding: 2px 0 2px 14px; border-left: 2px solid #3a3c42; color: #b9bbc0; }
+.markdown-content hr { margin: 22px 0; border: 0; border-top: 1px solid rgba(255,255,255,.12); }
+.markdown-inline-code { padding: 2px 5px; border: 1px solid rgba(255,255,255,.08); border-radius: 5px; background: #181a1e; color: #d9dade; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; font-size: .9em; }
+.markdown-code-block { margin: 16px 0; padding: 13px 14px; overflow-x: auto; border: 1px solid rgba(255,255,255,.08); border-radius: 10px; background: #111316; color: #dfe0e3; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; font-size: 12px; line-height: 1.6; white-space: pre; }
+.markdown-code-block code { font: inherit; }
+.markdown-content a { color: #d2d3d6; text-decoration: underline; text-decoration-color: #55585f; text-underline-offset: 2px; }
+.markdown-content table { width: 100%; margin: 16px 0; border-collapse: collapse; }
+.markdown-content th,
+.markdown-content td { padding: 7px 9px; border: 1px solid rgba(255,255,255,.1); text-align: left; }
+.markdown-content th { background: #15171b; color: #f0f0f1; font-weight: 600; }
 
 .composer-area { width: min(800px, calc(100% - 32px)); margin: 0 auto; padding: 10px 0 17px; }
 .composer { position: relative; overflow: visible; border: 1px solid var(--border); border-radius: 17px; background: var(--surface); box-shadow: 0 12px 35px rgba(0,0,0,.22); }

@@ -104,27 +104,27 @@ class RevisionQualityAdversarialTests(unittest.TestCase):
         self.assertEqual(result.versions[2].metadata["revision_assessment"].baseline_score, 0.80)
         self.assertEqual(result.final_version.id, "v2")
 
-    def test_regressed_revision_cannot_replace_accepted_prior_version(self) -> None:
-        issue = Issue("quality", Severity.MODERATE, "new problem")
+    def test_regressed_revision_preserves_stronger_prior_candidate(self) -> None:
+        issue = Issue("quality", Severity.MODERATE, "needs improvement")
         secondary = ScriptedSecondary(
             [
-                evaluation(0.90, correctness=0.90, issues=()),
-                evaluation(0.80, correctness=0.80, issues=(issue,)),
+                evaluation(0.80, correctness=0.80, issues=(issue,), decision=Decision.REVISE),
+                evaluation(0.75, correctness=0.75, issues=(issue,), decision=Decision.ACCEPT),
             ]
         )
-        result = Engine(ScriptedPrimary(["good", "worse"]), secondary=secondary).run(
+        result = Engine(ScriptedPrimary(["better", "worse"]), secondary=secondary).run(
             TaskContract(goal="task"),
             profile=EvaluationProfile(
                 dimensions=("correctness",),
                 required_dimensions=("correctness",),
                 minimum_scores={"correctness": 0.70},
-                minimum_overall_score=0.75,
+                minimum_overall_score=0.70,
                 max_revisions=1,
             ),
         )
-        self.assertEqual(result.decision, Decision.REVISE)
+        self.assertEqual(result.decision, Decision.ASK)
         self.assertEqual(result.final_version.id, "v0")
-        self.assertEqual(result.final_version.response, "good")
+        self.assertEqual(result.final_version.response, "better")
         self.assertEqual(result.versions[1].metadata["revision_assessment"].status, "regressed")
 
 

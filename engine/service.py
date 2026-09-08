@@ -70,14 +70,14 @@ class EngineService:
 
 def create_default_service() -> EngineService:
     """Create the provider-configured runtime without leaking provider details into Engine."""
-    # Defaults use models with a current Gemini API free tier. Runtime/UI may override them.
     primary_provider = os.environ.get("REVISE_PRIMARY_PROVIDER", "gemini").strip().lower()
     secondary_provider = os.environ.get("REVISE_SECONDARY_PROVIDER", "gemini").strip().lower()
     primary_model = os.environ.get("REVISE_PRIMARY_MODEL") or os.environ.get("GEMINI_PRIMARY_MODEL") or os.environ.get("GEMINI_MODEL") or "gemini-3.7-flash"
     secondary_model = os.environ.get("REVISE_SECONDARY_MODEL") or os.environ.get("GEMINI_SECONDARY_MODEL") or "gemini-3.1-flash-lite"
 
-    primary_router = ModelRouter({provider: lambda model, provider=provider: build_primary(provider, model) for provider in ("gemini", "openai", "grok", "ollama")}, default=ModelSelection(primary_provider, primary_model))
-    secondary_router = SecondaryRouter({provider: lambda model, provider=provider: build_secondary(provider, model) for provider in ("gemini", "openai", "grok", "ollama")}, default=ModelSelection(secondary_provider, secondary_model))
+    providers = ("gemini", "groq", "openrouter", "openai", "grok")
+    primary_router = ModelRouter({provider: lambda model, provider=provider: build_primary(provider, model) for provider in providers}, default=ModelSelection(primary_provider, primary_model))
+    secondary_router = SecondaryRouter({provider: lambda model, provider=provider: build_secondary(provider, model) for provider in providers}, default=ModelSelection(secondary_provider, secondary_model))
     return EngineService(
         Engine(FunctionPrimary(lambda _contract, _context: ""), trace_sink=console_trace_sink),
         primary_router=primary_router,

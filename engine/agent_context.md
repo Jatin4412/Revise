@@ -10,7 +10,7 @@
 - Primary, Secondary, and Verifier are roles, not fixed model identities.
 
 ## Core objective
-Build an evaluation-driven answer/revision engine that generates, independently evaluates, verifies where deterministic evidence exists, revises when necessary, and retains the best valid result.
+Build an evaluation-driven answer/revision engine that generates, independently evaluates, verifies where deterministic/external evidence exists, revises when necessary, and retains the best valid result.
 
 ## Core flow
 ```text
@@ -36,23 +36,21 @@ User -> Task Contract -> Mode/Profile -> Model Router -> Primary
 
 ## Current implementation
 - Task contracts/state, Lite/Basic/Pro/Auto modes, adaptive evaluation profiles, evidence fusion, decision engine, bounded revision loop, versioning, and best-version selection exist.
-- TaskContract now carries optional explicit `output_schema` for machine-checkable structured output requirements.
+- TaskContract carries optional explicit `output_schema` for machine-checkable structured output requirements.
 - Provider-neutral Primary/Secondary/Verifier protocols exist.
-- Runtime adapters currently support Gemini, Groq, OpenRouter, OpenAI, and Grok.
-- Ollama is intentionally not part of the current testing/selector setup.
+- Runtime adapters currently support Gemini, Groq, OpenRouter, OpenAI, and Grok; Ollama remains intentionally outside the current selector/testing setup.
 - Structured Secondary evaluation exists.
 - HTTP boundary is stable: `GET /health`, `POST /v1/engine`, success `{text, decision, version_id}`, generic error `{error:{code,message}}`.
 - Phase A execution observability is complete: structured trace records request, contract/profile, Primary, Secondary, per-dimension evaluation, verifier, decision, revisions, and final selection. Trace excludes prompts, responses, and credentials. Console trace is enabled for the local default service.
 - Local end-to-end runtime has been verified for Gemini 3.1 Flash-Lite, OpenRouter Free, Groq GPT-OSS 120B, and Gemini 3.7 Flash after retry.
-- Phase C deterministic verification primitives now exist in `engine/revise/verifiers.py`: arithmetic consistency checks, Python AST syntax checks without execution, JSON syntax checks, and explicit JSON schema validation. Profiles select only relevant deterministic checks, and the engine fuses their evidence with Secondary/custom verifier evidence before decision policy.
-- Arithmetic task detection now also recognizes explicit numeric expressions using ASCII or Unicode operators such as `25 × 17`, and the arithmetic verifier can compare a direct numeric answer against a single arithmetic expression in the task.
-- Phase C deliberately does not execute arbitrary generated code; safe compiler/test execution remains a future bounded verifier capability.
+- Phase C deterministic verification includes arithmetic consistency, Python AST syntax checking, Python compile-only checking, JSON syntax, and explicit JSON schema validation. Generated Python is never executed.
+- Richer JSON schema validation supports primitive/object/array types, required properties, nested properties/items, additional-property control, enum/const, string length/pattern constraints, numeric minimum/maximum, array size/uniqueness constraints, and local `#/...` references. Unsupported or malformed schemas fail closed.
+- Phase C external source verification now exists in `engine/revise/external.py`. Research/source/citation/factual profiles select it separately from `groundedness` and `evidence_quality`. The default verifier checks bounded HTTP(S) source reachability only, rejects private/loopback/link-local/reserved targets, limits sources and bytes, and never claims that reachability proves factual support.
+- External verification failures participate in evidence precedence and block acceptance when a required cited source is unreachable or required citations are missing.
 - Phase D revision quality is implemented in `engine/revise/revision.py`. Each revision is compared with its immediately previous evaluated version; the engine tracks score delta/net improvement, resolved and introduced issues, improved and regressed dimensions, and an overall revision status.
 - Revision issue identity is stable across severity changes using issue type, location, and normalized description. Severity changes are tracked separately as downgraded or escalated issues; escalations are regressions and downgrades count as improvement signals.
 - Phase D decision policy rejects unchanged or regressed revisions, while allowing revisions with a genuine score/dimension improvement or relevant issue resolution. Material introduced issues and dimension regressions are treated as regressions. The best valid prior version remains selectable when a later revision is rejected.
 - Revision assessment is stored in `Version.metadata` and summarized in the development trace; response payloads remain excluded from trace details.
-- Deterministic evidence precedence is enforced in `engine/revise/decision.py`: a deterministic `fail` blocks acceptance regardless of a confident LLM/model `pass`, causing `REVISE` while budget remains and `ASK` when exhausted.
-- Richer deterministic JSON schema validation is now implemented. The bounded verifier supports primitive/object/array types, required properties, nested properties/items, additional-property control, enum/const, string length/pattern constraints, numeric minimum/maximum, array size/uniqueness constraints, and local `#/...` references. Unsupported or malformed schemas fail closed.
 
 ## Current model/runtime policy
 - Default Primary: `gemini / gemini-3.7-flash`.
@@ -78,18 +76,19 @@ User -> Task Contract -> Mode/Profile -> Model Router -> Primary
 - Model router preserves `resolve()` as adapter resolution and exposes `selection()` separately for runtime selection descriptors.
 - Tests cover weighted scoring, partial-result rejection, low-confidence rejection, dimension-floor revision, overall-floor revision, revision context propagation, trace revision flow, and role-independent model routing.
 
-## Phase C — Deterministic verification (implemented baseline)
+## Phase C — Deterministic and external verification (implemented baseline + follow-up)
 - Added a provider-neutral deterministic verifier registry.
 - Math-like tasks can select arithmetic consistency verification.
-- Python tasks can select AST syntax verification without executing generated code.
+- Python tasks select AST syntax and compile-only verification without executing generated code.
 - JSON-formatted tasks can select JSON syntax verification.
-- Explicit output schemas now select deterministic JSON schema verification.
-- Deterministic evidence is fused with Secondary/custom verifier evidence and participates in the existing evidence-precedence model.
+- Explicit output schemas select deterministic JSON schema verification.
+- Deterministic evidence is fused with Secondary/custom verifier evidence and participates in evidence precedence.
 - Decision policy explicitly enforces deterministic-failure precedence after evidence fusion.
-- Trace records deterministic verifier completion without storing candidate response payloads.
-- Regression tests cover wrong arithmetic, direct numeric answers for Unicode multiplication expressions, Python syntax checking, JSON syntax checking, profile selection for explicit arithmetic expressions, and deterministic failure overriding a confident model pass.
-- Richer schema validation is now covered by dedicated tests for schema selection, required/type checks, nested objects/arrays, additional properties, enum/pattern constraints, array constraints, invalid JSON, and registry execution.
-- Safe runtime code tests, citation/source verification, and broader external evidence remain follow-up work rather than being faked as complete.
+- Added bounded external source verification for cited HTTP(S) URLs. It is reachability verification, not claim-truth verification, and is isolated behind a provider-neutral fetcher/verifier boundary.
+- External source failures are handled as non-passing evidence and cannot be overridden by model acceptance.
+- Tests cover Python compiler behavior, non-execution, source reachability, unavailable sources, required citations, source bounds/deduplication, fetch errors, registry execution, and profile selection.
+- Safe runtime code tests beyond compile-only verification remain deferred until genuine sandbox infrastructure exists.
+- Broader external evidence adapters remain follow-up work; do not fake semantic claim verification.
 
 ## Phase D — Revision quality (implemented)
 - Added `RevisionAssessment` and `assess_revision()` as a provider-neutral comparison layer.
@@ -102,8 +101,8 @@ User -> Task Contract -> Mode/Profile -> Model Router -> Primary
 
 ## Current roadmap
 ### Phase C follow-up
-- Add safe, sandboxed code tests/compiler checks where infrastructure permits.
-- Add citation/source verification and other external evidence adapters.
+- Add genuine sandboxed code execution/tests only when secure bounded infrastructure is available.
+- Add richer external evidence adapters that can verify structured source metadata or task-specific facts without conflating reachability with claim truth.
 
 ### Phase D follow-up
 - Continue adversarial/corner-case testing around multi-issue interactions, missing dimensions, score ties, and mixed improvements/regressions.

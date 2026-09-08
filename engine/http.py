@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hmac
 import json
 import os
 import traceback
@@ -14,6 +15,7 @@ DEFAULT_PORT = 8000
 ENGINE_PATH = "/v1/engine"
 TRACE_PATH = "/v1/engine/trace"
 HEALTH_PATH = "/health"
+TRACE_TOKEN_HEADER = "X-Revise-Trace-Token"
 
 
 class EngineHTTPHandler(BaseHTTPRequestHandler):
@@ -58,6 +60,9 @@ class EngineHTTPHandler(BaseHTTPRequestHandler):
         if self.path not in (ENGINE_PATH, TRACE_PATH):
             self._send_json(404, {"error": {"code": "not_found", "message": "endpoint not found"}})
             return
+        if self.path == TRACE_PATH and not _trace_access_allowed(self.headers.get(TRACE_TOKEN_HEADER)):
+            self._send_json(403, {"error": {"code": "trace_forbidden", "message": "development trace access is not enabled"}})
+            return
 
         try:
             length = int(self.headers.get("Content-Length", "-1"))
@@ -84,6 +89,22 @@ class EngineHTTPHandler(BaseHTTPRequestHandler):
     def log_message(self, format: str, *args: object) -> None:
         # Keep the adapter quiet by default; callers can run it behind their own logger.
         return
+
+
+def _trace_access_allowed(token: str | None) -> bool:
+    """Allow local development trace by default, but protect non-local exposure.
+
+    Setting ``REVISE_TRACE_TOKEN`` always requires the matching header. If no token
+    is configured, the trace endpoint remains available only when the configured
+    host is loopback/local. This preserves the current local developer workflow
+    while preventing accidental trace exposure when the engine is bound publicly.
+    """
+    configured_token = os.environ.get("REVISE_TRACE_TOKEN")
+    if configured_token:
+        return token is not None and hmac.compare_digest(token, configured_token)
+
+    configured_host = os.environ.get("REVISE_HOST", DEFAULT_HOST).strip().lower()
+    return configured_host in {"127.0.0.1", "localhost", "::1"}
 
 
 def serve(*, host: str | None = None, port: int | None = None) -> None:

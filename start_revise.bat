@@ -35,28 +35,20 @@ echo [3/6] Fetching latest main...
 git fetch origin main
 if errorlevel 1 (
     echo [ERROR] Failed to fetch origin/main.
-    if exist "%ENV_BACKUP%" del /Q "%ENV_BACKUP%" >nul 2>&1
-    pause
-    exit /b 1
+    goto :fail
 )
 
 echo [4/6] Forcing local main to exact origin/main...
 git checkout -B main origin/main
 if errorlevel 1 (
     echo [ERROR] Failed to align local main with origin/main.
-    if exist "%ENV_BACKUP%" copy /Y "%ENV_BACKUP%" ".env" >nul
-    if exist "%ENV_BACKUP%" del /Q "%ENV_BACKUP%" >nul 2>&1
-    pause
-    exit /b 1
+    goto :fail
 )
 
 git reset --hard origin/main
 if errorlevel 1 (
     echo [ERROR] Failed to reset local main to origin/main.
-    if exist "%ENV_BACKUP%" copy /Y "%ENV_BACKUP%" ".env" >nul
-    if exist "%ENV_BACKUP%" del /Q "%ENV_BACKUP%" >nul 2>&1
-    pause
-    exit /b 1
+    goto :fail
 )
 
 echo [5/6] Restoring local .env...
@@ -66,14 +58,23 @@ if exist "%ENV_BACKUP%" (
 )
 
 echo.
-echo Verifying branch state...
-git branch --show-current
+echo Verifying exact main state...
 git status --short --branch
+git rev-parse HEAD
+git rev-parse origin/main
 
-echo.
+git merge-base --is-ancestor HEAD origin/main
+if errorlevel 1 (
+    echo [ERROR] Local main is not aligned with origin/main.
+    goto :fail_no_env
+)
+git diff --quiet HEAD origin/main
+if errorlevel 1 (
+    echo [ERROR] Local main differs from origin/main.
+    goto :fail_no_env
+)
+
 echo [6/6] Starting engine and web server...
-
-auto-start-engine
 start "Revise Engine" cmd /k "cd /d %ROOT% && python -m engine --serve"
 
 timeout /t 2 /nobreak >nul
@@ -86,5 +87,15 @@ echo Engine: http://127.0.0.1:8000
 echo Web:    http://localhost:3000
 echo ==========================================
 echo.
-
 exit /b 0
+
+:fail
+if exist "%ENV_BACKUP%" (
+    copy /Y "%ENV_BACKUP%" ".env" >nul
+    del /Q "%ENV_BACKUP%" >nul 2>&1
+)
+:fail_no_env
+echo.
+echo [ERROR] Revise startup aborted.
+pause
+exit /b 1

@@ -101,7 +101,7 @@ _DEFAULT_VERIFIERS: dict[str, DeterministicVerifier] = {"arithmetic": Arithmetic
 
 
 def run_deterministic_verifiers(contract: TaskContract, response: str, profile: EvaluationProfile, *, registry: dict[str, DeterministicVerifier] | None = None, max_steps: int | None = None) -> tuple[Evidence, ...]:
-    selected = registry or _DEFAULT_VERIFIERS
+    selected = _DEFAULT_VERIFIERS if registry is None else registry
     names = tuple(profile.deterministic_checks)
     budget = profile.max_verification_steps if max_steps is None else max(0, max_steps)
     evidence: list[Evidence] = []
@@ -111,7 +111,7 @@ def run_deterministic_verifiers(contract: TaskContract, response: str, profile: 
             continue
         verifier = selected.get(name)
         if verifier is None:
-            evidence.append(Evidence(f"deterministic.{name}", "deterministic", "fail", 1.0, ("verifier_missing",)))
+            evidence.append(Evidence(f"deterministic.{name}", "deterministic", "fail", 1.0, (f"verifier_unavailable:{name}", "verifier_missing")))
             continue
         evidence.extend(verifier.verify(contract, response))
     return tuple(evidence)

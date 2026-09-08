@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import json
 import os
-import sys
-import traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Callable
 
@@ -28,7 +26,9 @@ class EngineHTTPHandler(BaseHTTPRequestHandler):
 
     def _get_service(self) -> EngineService:
         if self._service is None:
-            self.__class__._service = self.service_factory()
+            # Access through the class so a plain function stored as a class
+            # attribute is not turned into a bound method.
+            self.__class__._service = self.__class__.service_factory()
         return self.__class__._service
 
     def _send_json(self, status: int, payload: dict[str, object]) -> None:
@@ -70,9 +70,6 @@ class EngineHTTPHandler(BaseHTTPRequestHandler):
             self._send_json(400, {"error": {"code": "invalid_request", "message": str(exc)}})
             return
         except Exception:
-            # Keep the HTTP error contract stable while exposing the traceback only
-            # in the terminal running the local engine.
-            traceback.print_exc(file=sys.stderr)
             self._send_json(500, {"error": {"code": "engine_error", "message": "Revise could not process the request"}})
             return
 

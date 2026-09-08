@@ -29,6 +29,11 @@ def decide(
     if any(e.method == "deterministic" and e.result == "fail" for e in result.evidence):
         return _next_action(result, profile, revisions_used)
 
+    # Required external source checks also outrank model acceptance. A source
+    # verification failure means the candidate cannot claim a verified citation.
+    if any(e.method == "external" and e.result == "fail" for e in result.evidence):
+        return _next_action(result, profile, revisions_used)
+
     # A revision must earn its place. Regressions are never accepted merely because
     # the candidate clears the absolute quality thresholds.
     if revision_assessment is not None and revision_assessment.status == "regressed":

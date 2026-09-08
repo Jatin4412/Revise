@@ -11,15 +11,21 @@ SPECIALIZED = ("mathematical_validity", "code_correctness", "logical_validity")
 def build_profile(contract: TaskContract) -> EvaluationProfile:
     dimensions = list(CORE)
     text = " ".join((contract.goal, *contract.requirements, *contract.known_context)).lower()
+    deterministic_checks: list[str] = []
 
     if any(k in text for k in ("code", "python", "program", "function", "implement")):
         dimensions.append("code_correctness")
+        if "python" in text:
+            deterministic_checks.append("python_syntax")
     if any(k in text for k in ("math", "calculate", "equation", "formula", "arithmetic")):
         dimensions.append("mathematical_validity")
+        deterministic_checks.append("arithmetic")
     if any(k in text for k in ("logic", "proof", "reasoning")):
         dimensions.append("logical_validity")
     if any(k in text for k in ("research", "source", "citation", "fact", "factual")):
         dimensions.extend(("groundedness", "evidence_quality", "source_verification"))
+    if "json" in (contract.desired_format or "").lower() or any("json" in item.lower() for item in contract.verification_requirements):
+        deterministic_checks.append("json")
 
     if contract.mode is Mode.LITE:
         effort, revisions, verification = "low", 0, 1
@@ -30,7 +36,6 @@ def build_profile(contract: TaskContract) -> EvaluationProfile:
     else:
         effort, revisions, verification = "medium", 1, 2
 
-    # Core task-success dimensions are more important than communication polish.
     weights = {name: 1.0 for name in dimensions}
     for name in ("goal_alignment", "task_completion", "correctness", "instruction_following"):
         weights[name] = 1.25
@@ -41,17 +46,15 @@ def build_profile(contract: TaskContract) -> EvaluationProfile:
         if name in weights:
             weights[name] = 1.25
 
-    # A dimension-specific floor prevents a high average from hiding a critical weakness.
     minimum_scores = {name: 0.70 for name in dimensions}
     required = tuple(name for name in ("goal_alignment", "task_completion", "correctness", "instruction_following") if name in dimensions)
-
     hard_gate_terms = ("safety", "security", "critical", "medical", "legal")
     hard_gates = ("safety",) if any(k in text for k in hard_gate_terms) else ()
 
     return EvaluationProfile(
         dimensions=tuple(dict.fromkeys(dimensions)),
         hard_gates=hard_gates,
-        deterministic_checks=(),
+        deterministic_checks=tuple(dict.fromkeys(deterministic_checks)),
         external_verification=("source_verification",) if "source_verification" in dimensions else (),
         dimension_weights=weights,
         minimum_scores=minimum_scores,

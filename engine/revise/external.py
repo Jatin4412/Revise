@@ -89,7 +89,7 @@ def run_external_verifiers(
     *,
     registry: dict[str, SourceVerifier] | None = None,
 ) -> tuple[Evidence, ...]:
-    selected = registry or {"source_verification": SourceVerifier()}
+    selected = registry or {"source_verification": SourceVerifier(max_sources=max(1, profile.max_verification_steps))}
     evidence: list[Evidence] = []
     for name in profile.external_verification:
         verifier = selected.get(name)

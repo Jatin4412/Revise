@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Callable
 
@@ -70,6 +71,9 @@ class EngineHTTPHandler(BaseHTTPRequestHandler):
             self._send_json(400, {"error": {"code": "invalid_request", "message": str(exc)}})
             return
         except Exception:
+            # Keep the public response generic, but expose the real traceback in
+            # the local developer console so runtime failures are diagnosable.
+            traceback.print_exc()
             self._send_json(500, {"error": {"code": "engine_error", "message": "Revise could not process the request"}})
             return
 

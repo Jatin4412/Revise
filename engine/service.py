@@ -41,8 +41,7 @@ class EngineService:
 
     def handle(self, request: EngineRequest) -> EngineResponse:
         result = self._run(request)
-        version = result.final_version
-        return EngineResponse(version.response if version else "", result.decision, version.id if version else None)
+        return self._response(result)
 
     def handle_payload(self, payload: dict[str, object]) -> dict[str, str | None]:
         return self.handle(self._parse_request(payload)).to_dict()
@@ -57,7 +56,12 @@ class EngineService:
         result = self._run(self._parse_request(payload))
         response = self._response(result).to_dict()
         response["trace"] = [
-            {"timestamp": event.timestamp, "stage": event.stage, "status": event.status, "details": dict(event.details)}
+            {
+                "timestamp": event.timestamp,
+                "stage": event.stage,
+                "status": event.status,
+                "details": dict(event.details),
+            }
             for event in result.trace
         ]
         return response
@@ -69,8 +73,8 @@ class EngineService:
         contract = make_contract(prompt, mode=request.mode)
         primary_selection = request.primary_model or request.model or (self.primary_router.default if self.primary_router else None)
         secondary_selection = request.secondary_model or (self.secondary_router.default if self.secondary_router else None)
-        primary = self.primary_router.resolve(primary_selection) if self.primary_router else None
-        secondary = self.secondary_router.resolve(secondary_selection) if self.secondary_router else None
+        primary = self.primary_router.resolve(primary_selection) if self.primary_router else self.engine.primary
+        secondary = self.secondary_router.resolve(secondary_selection) if self.secondary_router else self.engine.secondary
         _annotate_model(primary, primary_selection)
         _annotate_model(secondary, secondary_selection)
         if primary is None:

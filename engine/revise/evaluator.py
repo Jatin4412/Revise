@@ -5,7 +5,7 @@ from collections.abc import Iterable
 from typing import Callable
 
 from .evidence import fuse_evidence
-from .models import Decision, DimensionResult, EvaluationProfile, EvaluationResult, Evidence, Severity, TaskContract
+from .models import Decision, DimensionResult, EvaluationProfile, EvaluationResult, Evidence, Issue, Severity, TaskContract
 
 DimensionEvaluator = Callable[[TaskContract, str], DimensionResult]
 _VALID_STATUSES = {"pass", "partial", "fail", "unknown"}
@@ -27,7 +27,6 @@ def evaluate(
             if evaluator is None
             else evaluator(contract, response)
         )
-
     fused = fuse_evidence(evidence)
     return _build_result(profile, dimensions, fused.evidence)
 
@@ -50,24 +49,28 @@ def validate_evaluation_result(result: EvaluationResult, profile: EvaluationProf
         status = dimension.status if dimension.status in _VALID_STATUSES else "unknown"
         score = dimension.score
         confidence = dimension.confidence
-        if status != dimension.status or (score is not None and (isinstance(score, bool) or not isinstance(score, (int, float)) or not math.isfinite(score) or not 0 <= score <= 1)) or isinstance(confidence, bool) or not isinstance(confidence, (int, float)) or not math.isfinite(confidence) or not 0 <= confidence <= 1:
+        valid_score = score is None or (not isinstance(score, bool) and isinstance(score, (int, float)) and math.isfinite(score) and 0 <= score <= 1)
+        valid_confidence = not isinstance(confidence, bool) and isinstance(confidence, (int, float)) and math.isfinite(confidence) and 0 <= confidence <= 1
+        if status != dimension.status or not valid_score or not valid_confidence:
             dimensions[name] = DimensionResult(None, 0.0, "unknown", "malformed dimension score, confidence, or status")
             malformed = True
         else:
             dimensions[name] = dimension
     if any(name not in profile.dimensions for name in result.dimensions):
         malformed = True
-        issues.append(__import__("engine.revise.models", fromlist=["Issue"]).Issue("malformed_evaluation", Severity.MAJOR, "evaluator returned an unexpected dimension"))
+        issues.append(Issue("malformed_evaluation", Severity.MAJOR, "evaluator returned an unexpected dimension"))
     overall = result.overall_score
     confidence = result.confidence
-    if isinstance(overall, bool) or (overall is not None and (not isinstance(overall, (int, float)) or not math.isfinite(overall) or not 0 <= overall <= 1)):
+    valid_overall = overall is None or (not isinstance(overall, bool) and isinstance(overall, (int, float)) and math.isfinite(overall) and 0 <= overall <= 1)
+    valid_confidence = not isinstance(confidence, bool) and isinstance(confidence, (int, float)) and math.isfinite(confidence) and 0 <= confidence <= 1
+    if not valid_overall:
         overall = None
         malformed = True
-    if isinstance(confidence, bool) or not isinstance(confidence, (int, float)) or not math.isfinite(confidence) or not 0 <= confidence <= 1:
+    if not valid_confidence:
         confidence = 0.0
         malformed = True
     if malformed:
-        issues.append(__import__("engine.revise.models", fromlist=["Issue"]).Issue("malformed_evaluation", Severity.MAJOR, "evaluator output failed schema validation and was converted to fail-closed unknown state"))
+        issues.append(Issue("malformed_evaluation", Severity.MAJOR, "evaluator output failed schema validation and was converted to a fail-closed unknown state"))
         return EvaluationResult(Decision.ASK, overall, confidence, dimensions, tuple(issues), result.evidence, result.revision, result.verification)
     return EvaluationResult(result.decision, overall, confidence, dimensions, tuple(issues), result.evidence, result.revision, result.verification)
 

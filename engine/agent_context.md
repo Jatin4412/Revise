@@ -46,13 +46,17 @@ User -> Task Contract -> Mode/Profile -> Model Router -> Primary
 - Local end-to-end runtime has been verified for Gemini 3.1 Flash-Lite, OpenRouter Free, Groq GPT-OSS 120B, and Gemini 3.7 Flash after retry.
 - Phase C deterministic verification includes arithmetic consistency, Python AST syntax checking, Python compile-only checking, JSON syntax, and explicit JSON schema validation. Generated Python is never executed.
 - Richer JSON schema validation supports primitive/object/array types, required properties, nested properties/items, additional-property control, enum/const, string length/pattern constraints, numeric minimum/maximum, array size/uniqueness constraints, and local `#/...` references. Unsupported or malformed schemas fail closed.
-- Phase C external source verification exists in `engine/revise/external.py`. Research/source/citation/factual profiles select it separately from `groundedness` and `evidence_quality`. The default verifier checks bounded HTTP(S) source reachability only, rejects private/loopback/link-local/reserved targets, rejects embedded URL credentials, validates redirect targets, limits sources and bytes using the profile verification budget, and never claims that reachability proves factual support.
+- Phase C external source verification exists in `engine/revise/external.py`. Research/source/citation/factual profiles select it separately from `groundedness` and `evidence_quality`. The default verifier checks bounded HTTP(S) source reachability only, rejects private/loopback/link-local/reserved targets, rejects embedded URL credentials, validates redirect targets, limits sources and bytes, and never claims that reachability proves factual support.
 - External verification failures participate in evidence precedence and block acceptance when a required cited source is unreachable or required citations are missing.
 - Phase D revision quality is implemented in `engine/revise/revision.py`. Each revision is compared with its immediately previous evaluated version; the engine tracks score delta/net improvement, resolved and introduced issues, improved and regressed dimensions, and an overall revision status.
 - Revision issue identity is stable across severity changes using issue type, location, and normalized description. Severity changes are tracked separately as downgraded or escalated issues; escalations are regressions and downgrades count as improvement signals.
 - Phase D decision policy rejects unchanged or regressed revisions, while allowing revisions with a genuine score/dimension improvement or relevant issue resolution. Material introduced issues and dimension regressions are treated as regressions. The best valid prior version remains selectable when a later revision is rejected.
 - Revision assessment is stored in `Version.metadata` and summarized in the development trace; response payloads remain excluded from trace details.
 - Phase E service compatibility was hardened so the application boundary does not assume concrete `Engine` internals when used with injected or lightweight engine implementations.
+- EvaluationProfile now validates its policy structure at construction: non-empty unique dimensions, valid required-dimension references, valid weight/floor references, finite bounded thresholds, supported effort values, non-negative integer budgets, and non-empty policy selectors.
+- Profile construction now considers the full task-contract text relevant to evaluation selection, including desired format/length/style, assumptions, success criteria, and verification requirements.
+- Configured hard-gate issue types are now enforced by the decision layer before ordinary severity/score acceptance checks.
+- Configured deterministic verifiers now fail closed when a requested verifier is missing from the registry instead of silently skipping verification.
 
 ## Current model/runtime policy
 - Default Primary: `gemini / gemini-3.7-flash`.
@@ -101,7 +105,7 @@ User -> Task Contract -> Mode/Profile -> Model Router -> Primary
 - A revision with no score increase can still qualify as improved when it resolves a relevant prior issue or improves a dimension.
 - Issue identity is preserved across severity changes; severity downgrades and escalations are explicitly assessed rather than being misclassified as issue removal/introduction.
 - Adversarial tests cover severity changes, severity escalation despite a higher overall score, dimension tradeoffs where a core dimension regresses, repeated revisions using the immediate previous baseline, and preservation of the stronger prior candidate after a regression.
-- Policy-contract tests now validate that profile dimensions, thresholds, weights, required dimensions, and execution budgets are internally coherent before runtime.
+- Policy-contract tests validate that profile dimensions, thresholds, weights, required dimensions, selectors, and execution budgets are internally coherent before runtime.
 
 ## Phase E — Development trace exposure (implemented baseline)
 - Added `POST /v1/engine/trace` as an additive development interface.
@@ -110,12 +114,14 @@ User -> Task Contract -> Mode/Profile -> Model Router -> Primary
 - Service compatibility is covered for concrete and lightweight/injected engine implementations.
 - Future work can add authenticated/protected development access or richer status views without coupling the core engine to UI concerns.
 
-## Current roadmap
-### Foundation stabilization — in progress
-- Treat `EvaluationProfile` as an executable policy contract and reject malformed policy configuration at construction.
-- Continue adversarial testing of policy ordering, evidence precedence, verification budgets, missing/unknown evaluation, and best-version selection.
-- Audit every profile field for actual runtime semantics; do not retain configuration fields that silently have no effect.
+## Foundation stabilization — current phase
+- Policy objects now fail closed when structurally invalid.
+- Hard-gate policy is enforced by the decision layer rather than being decorative configuration.
+- Missing configured deterministic verifiers fail closed rather than disappearing from the evaluation path.
+- Profile detection uses the complete contract fields relevant to selecting task-specific checks.
+- Remaining stabilization work is adversarial testing of verification-budget semantics, evidence requirements/stopping conditions, evaluation-result validity, and best-version invariants.
 
+## Roadmap after stabilization
 ### Phase C follow-up
 - Add genuine sandboxed code execution/tests only when secure bounded infrastructure is available.
 - Add richer external evidence adapters that can verify structured source metadata or task-specific facts without conflating reachability with claim truth.

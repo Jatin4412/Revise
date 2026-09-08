@@ -63,6 +63,8 @@ User -> Task Contract -> Mode/Profile -> Model Router -> Primary
 - `stopping_conditions` supports `stop_on_no_improvement`, which terminates further revision when the latest revision does not demonstrate improvement; unsupported stopping conditions are rejected at profile construction.
 - Best-version selection excludes revisions marked `regressed` or `unchanged`, preventing a rejected revision from displacing a stronger prior candidate.
 - Latest stabilization work fixes required-dimension uniqueness validation and external verifier registry semantics; external source-limit regression coverage now explicitly distinguishes deduplication from source-count overflow.
+- Evidence fusion now validates every evidence item before sorting or confidence aggregation; malformed types, results, metadata, provenance, and non-finite/out-of-range confidence fail closed instead of influencing acceptance.
+- Revision comparison now normalizes case and all whitespace in issue identity and treats a previously evaluated dimension that disappears in a revision as a regression.
 
 ## Current model/runtime policy
 - Default Primary: `gemini / gemini-3.7-flash`.
@@ -112,13 +114,15 @@ User -> Task Contract -> Mode/Profile -> Model Router -> Primary
 - Issue identity is preserved across severity changes; severity downgrades and escalations are explicitly assessed rather than being misclassified as issue removal/introduction.
 - Adversarial tests cover severity changes, severity escalation despite a higher overall score, dimension tradeoffs where a core dimension regresses, repeated revisions using the immediate previous baseline, and preservation of the stronger prior candidate after a regression.
 - Policy-contract and stabilization tests validate profile structure, evidence requirements, verifier budgets, malformed evaluator outputs, stopping behavior, hard gates, and best-version invariants.
+- Current adversarial audit adds coverage for score ties, mixed resolved/introduced issues, missing dimensions, normalized issue identity, and decision precedence across deterministic/external failures, hard gates, evidence requirements, revision regressions, and low-confidence evaluations.
 
 ## Phase E — Development trace exposure (implemented baseline)
 - Added `POST /v1/engine/trace` as an additive development interface.
 - The normal `/v1/engine` contract is unchanged.
 - Trace responses serialize only `TraceEvent` timestamp/stage/status/details metadata and preserve the existing payload-safety boundary.
 - Service compatibility is covered for concrete and lightweight/injected engine implementations.
-- Future work can add authenticated/protected development access or richer status views without coupling the core engine to UI concerns.
+- Stronger trace access control is implemented and merged: loopback remains available for local development when no token is configured; non-loopback trace access is denied without a token; configured `REVISE_TRACE_TOKEN` requires a matching `X-Revise-Trace-Token` header.
+- Future work can add richer bounded status views without coupling the core engine to UI concerns.
 
 ## Foundation stabilization — current phase
 - Policy objects fail closed when structurally invalid.
@@ -128,7 +132,7 @@ User -> Task Contract -> Mode/Profile -> Model Router -> Primary
 - Evidence requirements now affect acceptance.
 - Evaluator result validation now fails closed.
 - `stop_on_no_improvement` and best-version invariants are implemented.
-- Stabilization regression fixes are now present on the working branch; local execution remains the final confirmation point before merging to `main`.
+- Stabilization regression fixes are merged to `main` and the current engine work is an additive adversarial audit branch.
 
 ## Roadmap after stabilization
 ### Phase C follow-up
@@ -136,10 +140,9 @@ User -> Task Contract -> Mode/Profile -> Model Router -> Primary
 - Add richer external evidence adapters that can verify structured source metadata or task-specific facts without conflating reachability with claim truth.
 
 ### Phase D follow-up
-- Continue adversarial/corner-case testing around multi-issue interactions, missing dimensions, score ties, and mixed improvements/regressions.
+- Continue adversarial/corner-case testing around multi-issue interactions, missing dimensions, score ties, mixed improvements/regressions, evidence conflicts, and malformed evidence.
 
 ### Phase E follow-up
-- Add stronger access control if the development trace endpoint is ever exposed beyond a trusted local/development environment.
 - Consider bounded run/status metadata if the UI needs progress/state without exposing model payloads or internal prompts.
 
 ## Working procedure

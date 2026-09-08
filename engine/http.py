@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import os
+import sys
+import traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Callable
 
@@ -68,7 +70,9 @@ class EngineHTTPHandler(BaseHTTPRequestHandler):
             self._send_json(400, {"error": {"code": "invalid_request", "message": str(exc)}})
             return
         except Exception:
-            # Provider/runtime details stay server-side; the client gets a stable error shape.
+            # Keep the HTTP error contract stable while exposing the traceback only
+            # in the terminal running the local engine.
+            traceback.print_exc(file=sys.stderr)
             self._send_json(500, {"error": {"code": "engine_error", "message": "Revise could not process the request"}})
             return
 

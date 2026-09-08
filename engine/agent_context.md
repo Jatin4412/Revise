@@ -1,6 +1,6 @@
 # Revise Engine Agent Context
 
-> Read this file before engine decisions or implementation changes. Update it when durable engine status, architecture, decisions, limitations, or roadmap changes.
+> Read this file before engine decisions or implementation changes. Update it when durable engine status, architecture, decisions, limitations, or roadmap change.
 
 ## Ownership and scope
 - Repository: `Jatin4412/Revise`
@@ -47,6 +47,7 @@ User -> Task Contract -> Mode/Profile -> Model Router -> Primary
 - Arithmetic task detection now also recognizes explicit numeric expressions using ASCII or Unicode operators such as `25 × 17`, and the arithmetic verifier can compare a direct numeric answer against a single arithmetic expression in the task.
 - Phase C deliberately does not execute arbitrary generated code; safe compiler/test execution remains a future bounded verifier capability.
 - Phase D revision quality is implemented in `engine/revise/revision.py`. Each revision is compared with its immediately previous evaluated version; the engine tracks score delta/net improvement, resolved and introduced issues, improved and regressed dimensions, and an overall revision status.
+- Revision issue identity is stable across severity changes using issue type, location, and normalized description. Severity changes are tracked separately as downgraded or escalated issues; escalations are regressions and downgrades count as improvement signals.
 - Phase D decision policy rejects unchanged or regressed revisions, while allowing revisions with a genuine score/dimension improvement or relevant issue resolution. Material introduced issues and dimension regressions are treated as regressions. The best valid prior version remains selectable when a later revision is rejected.
 - Revision assessment is stored in `Version.metadata` and summarized in the development trace; response payloads remain excluded from trace details.
 
@@ -90,7 +91,8 @@ User -> Task Contract -> Mode/Profile -> Model Router -> Primary
 - A revision with unchanged quality cannot be accepted solely because it crosses an absolute threshold.
 - Regressions cannot be accepted; the bounded loop continues if budget remains and otherwise returns `ASK`, with best-version selection preserving the stronger valid candidate.
 - A revision with no score increase can still qualify as improved when it resolves a relevant prior issue or improves a dimension.
-- Tests cover improvement, regression, unchanged revisions, issue resolution, trace assessment, and existing revision behavior.
+- Issue identity is preserved across severity changes; severity downgrades and escalations are explicitly assessed rather than being misclassified as issue removal/introduction.
+- Adversarial tests now cover severity changes, severity escalation despite a higher overall score, dimension tradeoffs where a core dimension regresses, repeated revisions using the immediate previous baseline, and preservation of the stronger prior candidate after a regression.
 
 ## Current roadmap
 ### Phase C follow-up
@@ -100,9 +102,9 @@ User -> Task Contract -> Mode/Profile -> Model Router -> Primary
 - Strengthen deterministic evidence precedence with adversarial tests where Secondary incorrectly passes a deterministically failing candidate.
 
 ### Phase D follow-up
-- Deep-debug revision quality with adversarial/corner-case tests, especially issue identity, severity interactions, multi-dimensional tradeoffs, and repeated revisions.
+- Continue adversarial/corner-case testing around multi-issue interactions, missing dimensions, score ties, and mixed improvements/regressions.
 
-### Phase E — Development trace exposure
+## Phase E — Development trace exposure
 Expose trace/status through an additive development interface for the UI agent. Do not casually change `/v1/engine`.
 
 ## Working procedure

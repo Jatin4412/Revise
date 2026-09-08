@@ -42,7 +42,7 @@ User -> Task Contract -> Mode/Profile -> Model Router -> Primary
 - Structured Secondary evaluation exists.
 - HTTP boundary is stable: `GET /health`, `POST /v1/engine`, success `{text, decision, version_id}`, generic error `{error:{code,message}}`.
 - Phase A execution observability is complete: structured trace records request, contract/profile, Primary, Secondary, per-dimension evaluation, verifier, decision, revisions, and final selection. Trace excludes prompts, responses, and credentials. Console trace is enabled for the local default service.
-- Local end-to-end runtime has been verified for Gemini 3.1 Flash-Lite, OpenRouter Free, and Groq GPT-OSS 120B. Gemini 3.7 Flash returned a provider-side 503 high-demand response during testing before later retries may be attempted.
+- Local end-to-end runtime has been verified for Gemini 3.1 Flash-Lite, OpenRouter Free, and Groq GPT-OSS 120B. Gemini 3.7 Flash has also completed the full pipeline on retry; earlier 503/high-demand responses were transient provider availability.
 
 ## Current model/runtime policy
 - Default Primary: `gemini / gemini-3.7-flash`.
@@ -53,21 +53,24 @@ User -> Task Contract -> Mode/Profile -> Model Router -> Primary
 - Groq/OpenRouter compatible requests send `User-Agent: ReviseEngine/0.1`.
 - Grok and OpenAI adapters remain supported for users with paid API access but are not presented as free choices.
 
-## Current provider diagnosis
-- Groq's previous HTTP 403 / Cloudflare error 1010 was resolved in local end-to-end testing after the compatibility update; GPT-OSS 120B successfully completed as Primary and Gemini 3.1 Flash-Lite successfully evaluated it.
-- A provider smoke-test matrix now exists at `engine/provider_matrix.py`. It exercises the four current free-test providers with three consistent prompts each, reports latency/HTTP status/output preview, and does not alter engine evaluation behavior.
+## Provider testing status
+- Primary-only matrix: 4 providers x 3 prompts completed with 2 transient failures on Gemini 3.7 Flash; Gemini 3.1, Groq, and OpenRouter were 3/3.
+- Full-pipeline matrix: 4 providers x 3 prompts completed with 0 failures. Each exercised Primary -> Gemini 3.1 Secondary -> evaluation -> decision -> final selection.
+- Current provider testing is considered green; transient Gemini capacity errors are treated as provider availability rather than engine defects.
 
-## Current known limitations / next roadmap
-### Provider testing (current)
-- Run `python -m engine.provider_matrix` locally to exercise the four current free-test providers.
-- Treat transient provider availability/auth/network failures as provider/runtime issues unless the same failure reproduces in a direct provider request.
-- Compare model behavior using the same prompts before changing evaluation logic.
+## Phase B — Strengthened evaluation (implemented)
+- `EvaluationProfile` now supports dimension weights, per-dimension minimum scores, required dimensions, minimum evaluator confidence, and minimum overall score.
+- Default adaptive profiles weight task-success and specialized correctness dimensions more heavily than communication polish.
+- Default dimension floor is 0.70, required core task dimensions are goal alignment, task completion, correctness, and instruction following, minimum confidence is 0.60, and minimum overall score is 0.75.
+- Evaluation computes a weighted overall score instead of an unweighted average.
+- Decision policy now rejects unknown, partial, failing, low-floor, low-confidence, and below-overall-threshold evaluations; material issues still trigger revision or ask according to revision budget.
+- Tests cover weighted scoring, partial-result rejection, low-confidence rejection, dimension-floor revision, and overall-floor revision.
 
-### Phase B — Strengthen evaluation (next after provider testing)
-- Make profiles drive rigorous task-specific checks.
-- Add explicit quality thresholds/hard gates where justified.
-- Weight dimensions by task needs.
-- Preserve uncertainty and prevent weak evaluator false passes.
+## Current roadmap
+### Phase B follow-up
+- Add deliberate adversarial/incomplete candidate tests against the real LLM Secondary.
+- Refine task-specific profile selection beyond keyword detection.
+- Add explicit hard-gate dimension semantics for safety/security/critical constraints.
 
 ### Phase C — Deterministic verification
 - Math -> deterministic checking.

@@ -182,8 +182,8 @@ class Engine:
         )
         return decide(contract, profile, result, revisions_used=revisions_used)
 
-    def _emit(self, trace: ExecutionTrace, stage: str, status: str, **details: object) -> None:
-        event = trace.record(stage, status, **details)
+    def _emit(self, trace: ExecutionTrace, stage: str, event_status: str, **details: object) -> None:
+        event = trace.record(stage, event_status, **details)
         if self.trace_sink is not None:
             try:
                 self.trace_sink(event)

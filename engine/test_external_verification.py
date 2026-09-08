@@ -1,7 +1,8 @@
 import unittest
 
+from engine.revise.decision import decide
 from engine.revise.external import SourceVerifier, run_external_verifiers
-from engine.revise.models import EvaluationProfile, Mode, TaskContract
+from engine.revise.models import Decision, DimensionResult, EvaluationProfile, EvaluationResult, Evidence, Mode, TaskContract
 from engine.revise.profile import build_profile
 
 
@@ -81,6 +82,25 @@ class ExternalVerificationTests(unittest.TestCase):
             registry={"source_verification": SourceVerifier(fetcher=fetcher)},
         )
         self.assertTrue(any(item.method == "external" and item.result == "pass" for item in evidence))
+
+    def test_external_failure_blocks_acceptance(self):
+        profile = EvaluationProfile(
+            dimensions=("goal_alignment",),
+            minimum_scores={"goal_alignment": 0.70},
+            required_dimensions=("goal_alignment",),
+            minimum_confidence=0.60,
+            minimum_overall_score=0.75,
+            max_revisions=1,
+        )
+        result = EvaluationResult(
+            Decision.ACCEPT,
+            0.95,
+            0.95,
+            dimensions={"goal_alignment": DimensionResult(0.95, 0.95, "pass")},
+            evidence=(Evidence("external.source_verification", "external", "fail", 1.0, ("status:404",)),),
+        )
+        decision = decide(self.contract(), profile, result, revisions_used=0)
+        self.assertEqual(decision.decision, Decision.REVISE)
 
 
 if __name__ == "__main__":

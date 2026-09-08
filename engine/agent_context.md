@@ -129,10 +129,11 @@ Use task-specific subsets rather than blindly running every dimension.
 - Default HTTP engine service now emits concise developer-facing trace lines to the Python server terminal.
 - `EngineResult.trace` exposes the structured trace to engine callers without changing the stable HTTP response contract.
 - Runtime provider/model selections are attached to resolved role components for trace labeling where the component supports metadata.
+- Local HTTP 500 handling now prints the full Python traceback to the developer console while preserving the generic public error response, making post-Secondary runtime failures diagnosable.
 
 ### Current known limitations / gaps
 
-- Phase A needs local runtime verification after the latest changes; the next test must confirm the Python terminal visibly shows the Primary -> Secondary -> evaluation -> decision sequence.
+- **Phase A local verification is currently failing after `SECONDARY COMPLETE`:** the trace reaches successful Secondary return but the request still falls through to the generic HTTP 500 before any evaluation-dimension event. The exact post-Secondary exception must be captured and fixed before Phase A can be marked complete.
 - The Verifier protocol/evidence path exists, but the default runtime does not yet configure substantive deterministic verifiers.
 - Mathematical, code, schema, citation, and similar checks still need stronger deterministic verification where appropriate rather than relying primarily on Secondary.
 - Revision quality is not yet enforced with a strong explicit improvement criterion; the loop exists, but improvement-over-baseline should become a first-class decision signal.
@@ -253,7 +254,7 @@ UI -> HTTP -> Engine integration: verified
 
 The basic `2+2` request correctly returned `2 + 2 = 4`, `accept`, `v0`.
 
-After Phase A code changes, functional behavior has not yet been re-run in this environment. The next required verification is local restart + request + terminal trace, followed by a forced revision test.
+After Phase A code changes, functional behavior has not yet been re-run in this environment. The latest local run confirms Primary and Secondary complete successfully, but a post-Secondary exception still prevents the HTTP response from succeeding. The new HTTP traceback logging is intended to identify that exact exception on the next request.
 
 ## Working procedure for this agent
 
@@ -269,4 +270,4 @@ Before making a substantive engine decision or implementation change:
 
 ## Immediate next action
 
-**Verify Phase A locally.** Restart `python -m engine --serve`, send a normal request, inspect the terminal trace, and then exercise a request that produces a revision so the trace demonstrates the real bounded loop. Only after this verification should Phase A be marked complete and Phase B begin.
+**Capture and fix the post-Secondary runtime exception.** Restart `python -m engine --serve`, send the same `what is 2+2` request, and inspect the traceback printed immediately after the request. Fix the smallest affected engine component, rerun the request, then exercise a forced revision so the trace demonstrates the real bounded loop. Only after this verification should Phase A be marked complete and Phase B begin.

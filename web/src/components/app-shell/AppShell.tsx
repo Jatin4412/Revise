@@ -94,7 +94,6 @@ export function AppShell() {
     <main className="chat-shell">
       <header className="chat-header">
         <button className="chat-brand" type="button" onClick={newChat} aria-label="New conversation">
-          <Logo />
           <span>Reiterate</span>
         </button>
       </header>
@@ -110,8 +109,9 @@ export function AppShell() {
           <div className="messages">
             {messages.map((message, index) => (
               <div className={`message message-${message.role}`} key={`${message.role}-${index}`}>
-                <div className="message-avatar">{message.role === "user" ? "You" : "R"}</div>
+                {message.role === "assistant" && <div className="message-avatar">R</div>}
                 <div className="message-body">{message.text}</div>
+                {message.role === "user" && <div className="message-avatar">You</div>}
               </div>
             ))}
             {isLoading && (
@@ -178,7 +178,6 @@ export function AppShell() {
             <button className="send-button" type="submit" disabled={!input.trim() || isLoading} aria-label="Send message"><SendIcon /></button>
           </div>
         </form>
-        <div className="composer-hint">Reiterate can make mistakes. Check important information.</div>
       </div>
     </main>
   );

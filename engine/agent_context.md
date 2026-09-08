@@ -52,6 +52,7 @@ User -> Task Contract -> Mode/Profile -> Model Router -> Primary
 - Revision issue identity is stable across severity changes using issue type, location, and normalized description. Severity changes are tracked separately as downgraded or escalated issues; escalations are regressions and downgrades count as improvement signals.
 - Phase D decision policy rejects unchanged or regressed revisions, while allowing revisions with a genuine score/dimension improvement or relevant issue resolution. Material introduced issues and dimension regressions are treated as regressions. The best valid prior version remains selectable when a later revision is rejected.
 - Revision assessment is stored in `Version.metadata` and summarized in the development trace; response payloads remain excluded from trace details.
+- Phase E service compatibility was hardened so the application boundary does not assume concrete `Engine` internals when used with injected or lightweight engine implementations.
 
 ## Current model/runtime policy
 - Default Primary: `gemini / gemini-3.7-flash`.
@@ -100,15 +101,21 @@ User -> Task Contract -> Mode/Profile -> Model Router -> Primary
 - A revision with no score increase can still qualify as improved when it resolves a relevant prior issue or improves a dimension.
 - Issue identity is preserved across severity changes; severity downgrades and escalations are explicitly assessed rather than being misclassified as issue removal/introduction.
 - Adversarial tests cover severity changes, severity escalation despite a higher overall score, dimension tradeoffs where a core dimension regresses, repeated revisions using the immediate previous baseline, and preservation of the stronger prior candidate after a regression.
+- Policy-contract tests now validate that profile dimensions, thresholds, weights, required dimensions, and execution budgets are internally coherent before runtime.
 
 ## Phase E — Development trace exposure (implemented baseline)
 - Added `POST /v1/engine/trace` as an additive development interface.
 - The normal `/v1/engine` contract is unchanged.
 - Trace responses serialize only `TraceEvent` timestamp/stage/status/details metadata and preserve the existing payload-safety boundary.
-- Added service-level tests for additive response shape and trace payload exclusion.
+- Service compatibility is covered for concrete and lightweight/injected engine implementations.
 - Future work can add authenticated/protected development access or richer status views without coupling the core engine to UI concerns.
 
 ## Current roadmap
+### Foundation stabilization — in progress
+- Treat `EvaluationProfile` as an executable policy contract and reject malformed policy configuration at construction.
+- Continue adversarial testing of policy ordering, evidence precedence, verification budgets, missing/unknown evaluation, and best-version selection.
+- Audit every profile field for actual runtime semantics; do not retain configuration fields that silently have no effect.
+
 ### Phase C follow-up
 - Add genuine sandboxed code execution/tests only when secure bounded infrastructure is available.
 - Add richer external evidence adapters that can verify structured source metadata or task-specific facts without conflating reachability with claim truth.

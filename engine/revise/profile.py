@@ -31,6 +31,8 @@ def build_profile(contract: TaskContract) -> EvaluationProfile:
         dimensions.extend(("groundedness", "evidence_quality", "source_verification"))
     if "json" in (contract.desired_format or "").lower() or any("json" in item.lower() for item in contract.verification_requirements):
         deterministic_checks.append("json")
+    if contract.output_schema is not None:
+        deterministic_checks.append("json_schema")
 
     if contract.mode is Mode.LITE:
         effort, revisions, verification = "low", 0, 1

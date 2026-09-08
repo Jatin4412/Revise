@@ -33,12 +33,13 @@ class EngineHTTPHandler(BaseHTTPRequestHandler):
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Content-Length", str(0 if status == 204 else len(body)))
         self.send_header("Access-Control-Allow-Origin", os.environ.get("REVISE_CORS_ORIGIN", "http://localhost:3000"))
         self.send_header("Access-Control-Allow-Methods", "POST, OPTIONS, GET")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
-        self.wfile.write(body)
+        if status != 204:
+            self.wfile.write(body)
 
     def do_OPTIONS(self) -> None:  # noqa: N802 - stdlib handler API
         self._send_json(204, {})

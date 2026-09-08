@@ -54,6 +54,7 @@ class SourceVerifier:
     max_sources: int = 4
 
     def verify(self, contract: TaskContract, response: str, profile: EvaluationProfile, *, max_sources: int | None = None) -> tuple[Evidence, ...]:
+        del profile
         urls = _extract_urls(response)
         if not urls:
             if _requires_citations(contract):
@@ -73,18 +74,11 @@ class SourceVerifier:
             if content_type: provenance += (f"content_type:{content_type.split(';', 1)[0].strip().lower()}",)
             evidence.append(Evidence("external.source_verification", "external", result, 1.0, provenance))
         if len(urls) > limit:
-            evidence.append(Evidence("external.source_verification", "external", "fail", 1.0, ("verification_budget_exhausted", f"sources_available:{len(urls)}", f"sources_checked:{limit}")))
+            evidence.append(Evidence("external.source_verification", "external", "fail", 1.0, ("source_limit_exhausted", f"sources_available:{len(urls)}", f"sources_checked:{limit}")))
         return tuple(evidence)
 
 
-def run_external_verifiers(
-    contract: TaskContract,
-    response: str,
-    profile: EvaluationProfile,
-    *,
-    registry: dict[str, SourceVerifier] | None = None,
-    max_steps: int | None = None,
-) -> tuple[Evidence, ...]:
+def run_external_verifiers(contract: TaskContract, response: str, profile: EvaluationProfile, *, registry: dict[str, SourceVerifier] | None = None, max_steps: int | None = None) -> tuple[Evidence, ...]:
     selected = registry or {"source_verification": SourceVerifier()}
     names = tuple(profile.external_verification)
     budget = profile.max_verification_steps if max_steps is None else max(0, max_steps)
@@ -97,10 +91,7 @@ def run_external_verifiers(
         if verifier is None:
             evidence.append(Evidence(f"external.{name}", "external", "fail", 1.0, ("verifier_missing",)))
             continue
-        if name == "source_verification":
-            evidence.extend(verifier.verify(contract, response, profile, max_sources=max(1, budget - index)))
-        else:
-            evidence.extend(verifier.verify(contract, response, profile, max_sources=max(1, budget - index)))
+        evidence.extend(verifier.verify(contract, response, profile))
     return tuple(evidence)
 
 

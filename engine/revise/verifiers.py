@@ -107,7 +107,10 @@ def run_deterministic_verifiers(contract: TaskContract, response: str, profile: 
     evidence: list[Evidence] = []
     for name in profile.deterministic_checks:
         verifier = selected.get(name)
-        if verifier is not None: evidence.extend(verifier.verify(contract, response))
+        if verifier is None:
+            evidence.append(Evidence("deterministic.registry", "deterministic", "fail", 1.0, (f"verifier_unavailable:{name}",)))
+            continue
+        evidence.extend(verifier.verify(contract, response))
     return tuple(evidence)
 
 

@@ -2,7 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
+import rehypeKatex from "rehype-katex";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
 import { createEngineClient, type EngineMode, type EngineModel } from "@/engine/client";
 
 const MODELS: Array<EngineModel & { label: string; providerLabel: string }> = [
@@ -40,11 +42,31 @@ function Logo() {
   return <div className="logo-mark" aria-label="Reiterate">R</div>;
 }
 
+function normalizeLatexDelimiters(content: string) {
+  const lines = content.split("\n");
+  let inFence = false;
+
+  return lines.map((line) => {
+    if (/^\s*(```|~~~)/.test(line)) {
+      inFence = !inFence;
+      return line;
+    }
+    if (inFence) return line;
+
+    return line
+      .replace(/\\\[/g, "$$\n")
+      .replace(/\\\]/g, "\n$$")
+      .replace(/\\\(/g, "$")
+      .replace(/\\\)/g, "$");
+  }).join("\n");
+}
+
 function AssistantMarkdown({ content }: { content: string }) {
   return (
     <div className="markdown-content">
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
+        remarkPlugins={[remarkGfm, remarkMath]}
+        rehypePlugins={[rehypeKatex]}
         components={{
           pre: ({ children }) => <pre className="markdown-code-block">{children}</pre>,
           code: ({ className, children, ...props }) => {
@@ -55,7 +77,7 @@ function AssistantMarkdown({ content }: { content: string }) {
           },
         }}
       >
-        {content}
+        {normalizeLatexDelimiters(content)}
       </ReactMarkdown>
     </div>
   );

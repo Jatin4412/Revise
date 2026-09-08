@@ -73,8 +73,14 @@ class EngineService:
         contract = make_contract(prompt, mode=request.mode)
         primary_selection = request.primary_model or request.model or (self.primary_router.default if self.primary_router else None)
         secondary_selection = request.secondary_model or (self.secondary_router.default if self.secondary_router else None)
-        primary = self.primary_router.resolve(primary_selection) if self.primary_router else self.engine.primary
-        secondary = self.secondary_router.resolve(secondary_selection) if self.secondary_router else self.engine.secondary
+        if self.primary_router is not None:
+            primary = self.primary_router.resolve(primary_selection)
+        else:
+            primary = getattr(self.engine, "primary", None)
+        if self.secondary_router is not None:
+            secondary = self.secondary_router.resolve(secondary_selection)
+        else:
+            secondary = getattr(self.engine, "secondary", None)
         _annotate_model(primary, primary_selection)
         _annotate_model(secondary, secondary_selection)
         if primary is None:

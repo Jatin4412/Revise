@@ -59,12 +59,20 @@ User -> Task Contract -> Mode/Profile -> Model Router -> Primary
 - Current provider testing is considered green; transient Gemini capacity errors are treated as provider availability rather than engine defects.
 
 ## Phase B — Strengthened evaluation (implemented)
-- `EvaluationProfile` now supports dimension weights, per-dimension minimum scores, required dimensions, minimum evaluator confidence, and minimum overall score.
+- `EvaluationProfile` supports dimension weights, per-dimension minimum scores, required dimensions, minimum evaluator confidence, and minimum overall score.
 - Default adaptive profiles weight task-success and specialized correctness dimensions more heavily than communication polish.
 - Default dimension floor is 0.70, required core task dimensions are goal alignment, task completion, correctness, and instruction following, minimum confidence is 0.60, and minimum overall score is 0.75.
 - Evaluation computes a weighted overall score instead of an unweighted average.
-- Decision policy now rejects unknown, partial, failing, low-floor, low-confidence, and below-overall-threshold evaluations; material issues still trigger revision or ask according to revision budget.
-- Tests cover weighted scoring, partial-result rejection, low-confidence rejection, dimension-floor revision, and overall-floor revision.
+- Decision policy rejects unknown, partial, failing, low-floor, low-confidence, and below-overall-threshold evaluations; material issues still trigger revision or ask according to revision budget.
+- Revision feedback now includes dimension status/score/confidence/reason in addition to explicit issues and revision instructions. This fixes loss of Secondary diagnosis when no structured issue item is emitted.
+- Model router preserves `resolve()` as adapter resolution and exposes `selection()` separately for runtime selection descriptors.
+- Tests cover weighted scoring, partial-result rejection, low-confidence rejection, dimension-floor revision, overall-floor revision, revision context propagation, trace revision flow, and role-independent model routing.
+
+## Current validation status
+- User-side test run reached 14/15 passing.
+- The remaining failure was traced to a genuine context propagation gap: the evaluator returned a dimension-level reason but no issue, and revision context only included issue descriptions/revision instructions.
+- The engine fix was committed to `main` as `e886360` and adds dimension feedback to revision context without exposing response payloads in trace.
+- Re-run `python -m unittest engine.test_engine -v` after synchronization. Expected result: all current engine regression tests pass.
 
 ## Current roadmap
 ### Phase B follow-up

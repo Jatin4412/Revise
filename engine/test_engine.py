@@ -53,6 +53,30 @@ class EngineTests(unittest.TestCase):
         self.assertIn("incomplete", primary.contexts[1])
         self.assertIn("response is incomplete", primary.contexts[1])
 
+    def test_trace_records_revision_and_final_decision(self) -> None:
+        primary = SequencePrimary(["incomplete", "complete answer"])
+        result = Engine(primary, secondary=BasicSecondary()).run(
+            TaskContract(goal="complete the task"),
+            profile=EvaluationProfile(dimensions=("task_completion",), max_revisions=1),
+        )
+
+        events = [(event.stage, event.status) for event in result.trace]
+        self.assertIn(("primary", "start"), events)
+        self.assertIn(("primary", "complete"), events)
+        self.assertIn(("secondary", "start"), events)
+        self.assertIn(("evaluation", "dimension"), events)
+        self.assertIn(("decision", "revise"), events)
+        self.assertIn(("revision", "requested"), events)
+        self.assertIn(("decision", "accept"), events)
+        self.assertEqual(result.trace[-1].stage, "final")
+        self.assertEqual(result.trace[-1].status, "selected")
+
+    def test_trace_does_not_contain_response_payload(self) -> None:
+        primary = FunctionPrimary(lambda contract, context: "SECRET_RESPONSE_SHOULD_NOT_BE_IN_TRACE")
+        result = Engine(primary).run(TaskContract(goal="say hello"))
+        trace_text = repr(result.trace)
+        self.assertNotIn("SECRET_RESPONSE_SHOULD_NOT_BE_IN_TRACE", trace_text)
+
     def test_service_rejects_empty_prompt(self) -> None:
         service = EngineService(FunctionPrimary(lambda contract, context: "ok"))
         with self.assertRaises(ValueError):

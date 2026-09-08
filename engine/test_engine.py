@@ -26,7 +26,7 @@ class SequencePrimary:
 class BasicSecondary:
     def evaluators(self, contract: TaskContract, profile: EvaluationProfile):
         def task_completion(contract: TaskContract, response: str) -> DimensionResult:
-            if "complete" in response.lower():
+            if "complete answer" in response.lower():
                 return DimensionResult(1.0, 1.0, "pass", "response completes the task")
             return DimensionResult(0.2, 1.0, "fail", "response is incomplete")
 
@@ -103,8 +103,8 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(seen, ["none"])
 
     def test_model_routers_are_role_independent(self) -> None:
-        primary = ModelRouter({"fake": lambda model: ("primary", model)}, default=ModelSelection("fake", "strong"))
-        secondary = SecondaryRouter({"fake": lambda model: ("secondary", model)}, default=ModelSelection("fake", "light"))
+        primary = ModelRouter({"fake": lambda model: type("PrimaryStub", (), {"model": model})()}, default=ModelSelection("fake", "strong"))
+        secondary = SecondaryRouter({"fake": lambda model: type("SecondaryStub", (), {"model": model})()}, default=ModelSelection("fake", "light"))
         self.assertEqual(primary.resolve().model, "strong")
         self.assertEqual(secondary.resolve().model, "light")
         self.assertEqual(primary.selection().model, "strong")

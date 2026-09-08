@@ -23,6 +23,8 @@ Deterministic / external verification
     ↓
 Evidence fusion
     ↓
+Revision quality comparison
+    ↓
 Decision
  ├─ ACCEPT → return best accepted version
  ├─ REVISE → regenerate with evaluation feedback (bounded)
@@ -43,8 +45,12 @@ A provider may be used for both roles, but role configuration remains separate s
 4. Apply task-specific quality dimensions and evidence.
 5. Treat unknown or unavailable evaluation as non-passing; do not claim an unevaluated candidate is verified.
 6. Prefer deterministic and external evidence when it can directly verify a property.
-7. Respect revision and verification budgets.
-8. Compare candidate versions and retain the best valid result.
+7. For revisions, compare against the immediately previous evaluated version; require material quality improvement, resolved relevant issues, or both.
+8. Treat regressions or unchanged revisions as non-acceptable and continue within the revision budget; when no budget remains, `ASK` and retain the best valid version.
+9. Respect revision and verification budgets.
+10. Compare candidate versions and retain the best valid result.
+
+Revision quality tracks baseline score, revised score, score delta/net improvement, resolved issues, introduced issues, improved dimensions, and regressed dimensions. A revision can qualify as improved without increasing its overall score when it resolves a relevant prior issue. Material introduced issues or dimension regressions make the revision regressed.
 
 Numerical weighting is intentionally not frozen at this foundation stage. Policy correctness and evidence precedence come first.
 

@@ -153,10 +153,14 @@ def _responses_callable(provider: str, endpoint: str, key: str, model: str) -> C
 
 def _chat_completions_callable(provider: str, endpoint: str, key: str, model: str) -> Callable[[str], str]:
     def call(prompt: str) -> str:
+        headers = {
+            "Authorization": f"Bearer {key}",
+            "User-Agent": "ReviseEngine/0.1",
+        }
         body = _post_json(
             endpoint,
             {"model": model, "messages": [{"role": "user", "content": prompt}], "stream": False},
-            {"Authorization": f"Bearer {key}"},
+            headers,
             60.0,
             provider,
         )

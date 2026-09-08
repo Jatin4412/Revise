@@ -5,6 +5,7 @@ from dataclasses import dataclass
 
 from .contracts import make_contract
 from .engine import Engine
+from .execution import console_trace_sink
 from .llm import build_primary, build_secondary
 from .model import ModelRouter, ModelSelection, SecondaryRouter
 from .providers import FunctionPrimary
@@ -46,6 +47,8 @@ class EngineService:
         primary_selection = request.primary_model or request.model
         primary = self.primary_router.resolve(primary_selection) if self.primary_router else None
         secondary = self.secondary_router.resolve(request.secondary_model) if self.secondary_router else None
+        _annotate_model(primary, primary_selection)
+        _annotate_model(secondary, request.secondary_model or (self.secondary_router.default if self.secondary_router else None))
         result = self.engine.run(contract, primary=primary, secondary=secondary)
         version = result.final_version
         return EngineResponse(version.response if version else "", result.decision, version.id if version else None)
@@ -73,7 +76,24 @@ def create_default_service() -> EngineService:
 
     primary_router = ModelRouter({provider: lambda model, provider=provider: build_primary(provider, model) for provider in ("gemini", "openai", "grok", "ollama")}, default=ModelSelection(primary_provider, primary_model))
     secondary_router = SecondaryRouter({provider: lambda model, provider=provider: build_secondary(provider, model) for provider in ("gemini", "openai", "grok", "ollama")}, default=ModelSelection(secondary_provider, secondary_model))
-    return EngineService(Engine(FunctionPrimary(lambda _contract, _context: "")), primary_router=primary_router, secondary_router=secondary_router)
+    return Engine(
+        FunctionPrimary(lambda _contract, _context: ""),
+        trace_sink=console_trace_sink,
+    ) if False else EngineService(
+        Engine(FunctionPrimary(lambda _contract, _context: ""), trace_sink=console_trace_sink),
+        primary_router=primary_router,
+        secondary_router=secondary_router,
+    )
+
+
+def _annotate_model(component: object | None, selection: ModelSelection | None) -> None:
+    if component is None or selection is None:
+        return
+    try:
+        setattr(component, "provider", selection.provider)
+        setattr(component, "model", selection.model or "configured-default")
+    except (AttributeError, TypeError):
+        pass
 
 
 def _parse_model_selection(raw: object) -> ModelSelection | None:

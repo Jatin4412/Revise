@@ -3,13 +3,20 @@
 import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { createEngineClient, type EngineModel } from "@/engine/client";
+import { createEngineClient, type EngineMode, type EngineModel } from "@/engine/client";
 
 const MODELS: Array<EngineModel & { label: string; providerLabel: string }> = [
   { provider: "gemini", model: "gemini-3.7-flash", label: "Gemini 3.7 Flash", providerLabel: "Gemini" },
   { provider: "gemini", model: "gemini-3.1-flash-lite", label: "Gemini 3.1 Flash-Lite", providerLabel: "Gemini" },
   { provider: "groq", model: "openai/gpt-oss-120b", label: "GPT-OSS 120B", providerLabel: "Groq" },
   { provider: "openrouter", model: "openrouter/free", label: "OpenRouter Free", providerLabel: "OpenRouter" },
+];
+
+const POWER_OPTIONS: Array<{ value: EngineMode; label: string; description: string }> = [
+  { value: "lite", label: "Lite", description: "Faster, lighter processing" },
+  { value: "basic", label: "Basic", description: "Balanced processing" },
+  { value: "pro", label: "Pro", description: "More effort for complex tasks" },
+  { value: "auto", label: "Auto", description: "Automatically chooses the right effort" },
 ];
 
 type Message = {
@@ -58,12 +65,16 @@ export function AppShell() {
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [modelOpen, setModelOpen] = useState(false);
+  const [powerOpen, setPowerOpen] = useState(false);
   const [selectedModel, setSelectedModel] = useState(MODELS[0]);
+  const [selectedPower, setSelectedPower] = useState<EngineMode>("basic");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLElement>(null);
   const engineClient = useRef(createEngineClient());
+
+  const currentPower = POWER_OPTIONS.find((option) => option.value === selectedPower) ?? POWER_OPTIONS[1];
 
   useEffect(() => {
     const textarea = textareaRef.current;
@@ -90,7 +101,7 @@ export function AppShell() {
     try {
       const response = await engineClient.current.request({
         prompt: value,
-        mode: "basic",
+        mode: selectedPower,
         primary_model: {
           provider: selectedModel.provider,
           model: selectedModel.model,
@@ -112,6 +123,7 @@ export function AppShell() {
     setInput("");
     setError(null);
     setModelOpen(false);
+    setPowerOpen(false);
     textareaRef.current?.focus();
   }
 
@@ -177,8 +189,33 @@ export function AppShell() {
           <div className="composer-footer">
             <div className="composer-left">
               <button type="button" className="attach-button" aria-label="Add attachment" disabled={isLoading}><PlusIcon /></button>
+              <div className="power-picker">
+                <button type="button" className="power-button" onClick={() => { setPowerOpen((open) => !open); setModelOpen(false); }} aria-haspopup="listbox" aria-expanded={powerOpen} disabled={isLoading}>
+                  <span>Power: {currentPower.label}</span>
+                  <ChevronIcon />
+                </button>
+                {powerOpen && !isLoading && (
+                  <div className="power-menu" role="listbox" aria-label="Choose Power">
+                    <div className="power-menu-title">Power</div>
+                    {POWER_OPTIONS.map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        className={`power-option ${selectedPower === option.value ? "is-selected" : ""}`}
+                        onClick={() => { setSelectedPower(option.value); setPowerOpen(false); }}
+                      >
+                        <span className="power-option-copy">
+                          <strong>{option.label}</strong>
+                          <small>{option.description}</small>
+                        </span>
+                        {selectedPower === option.value && <span className="power-check">✓</span>}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
               <div className="model-picker">
-                <button type="button" className="model-button" onClick={() => setModelOpen((open) => !open)} aria-haspopup="listbox" aria-expanded={modelOpen} disabled={isLoading}>
+                <button type="button" className="model-button" onClick={() => { setModelOpen((open) => !open); setPowerOpen(false); }} aria-haspopup="listbox" aria-expanded={modelOpen} disabled={isLoading}>
                   <span>{selectedModel.label}</span>
                   <ChevronIcon />
                 </button>

@@ -11,6 +11,7 @@ from engine.model import ModelRouter, ModelSelection, SecondaryRouter
 from engine.revise.decision import decide
 from engine.revise.evaluator import evaluate
 from engine.revise.models import Decision, DimensionResult, EvaluationProfile, EvaluationResult, Mode, TaskContract
+from engine.revise.verifiers import run_deterministic_verifiers
 
 
 class SequencePrimary:
@@ -48,14 +49,7 @@ class EngineTests(unittest.TestCase):
 
     def test_revision_context_reaches_primary(self) -> None:
         primary = SequencePrimary(["incomplete", "complete answer"])
-        result = Engine(primary, secondary=BasicSecondary()).run(
-            TaskContract(goal="complete the task"),
-            profile=EvaluationProfile(
-                dimensions=("task_completion",),
-                minimum_scores={"task_completion": 0.70},
-                max_revisions=1,
-            ),
-        )
+        result = Engine(primary, secondary=BasicSecondary()).run(TaskContract(goal="complete the task"), profile=EvaluationProfile(dimensions=("task_completion",), minimum_scores={"task_completion": 0.70}, max_revisions=1))
         self.assertEqual(result.decision.value, "accept")
         self.assertEqual(result.final_version.response, "complete answer")
         self.assertEqual(len(result.versions), 2)
@@ -64,14 +58,7 @@ class EngineTests(unittest.TestCase):
         self.assertIn("response is incomplete", primary.contexts[1] or "")
 
     def test_trace_records_revision_and_final_decision(self) -> None:
-        result = Engine(SequencePrimary(["incomplete", "complete answer"]), secondary=BasicSecondary()).run(
-            TaskContract(goal="complete the task"),
-            profile=EvaluationProfile(
-                dimensions=("task_completion",),
-                minimum_scores={"task_completion": 0.70},
-                max_revisions=1,
-            ),
-        )
+        result = Engine(SequencePrimary(["incomplete", "complete answer"]), secondary=BasicSecondary()).run(TaskContract(goal="complete the task"), profile=EvaluationProfile(dimensions=("task_completion",), minimum_scores={"task_completion": 0.70}, max_revisions=1))
         events = [(event.stage, event.status) for event in result.trace]
         self.assertIn(("primary", "start"), events)
         self.assertIn(("secondary", "start"), events)
@@ -171,6 +158,35 @@ class EngineTests(unittest.TestCase):
         result = EvaluationResult(Decision.ACCEPT, 0.60, 1.0, {"correctness": DimensionResult(0.60, 1.0, "pass", "weak")})
         profile = EvaluationProfile(dimensions=("correctness",), minimum_overall_score=0.75, max_revisions=1)
         self.assertEqual(decide(TaskContract(goal="task"), profile, result, revisions_used=0).decision, Decision.REVISE)
+
+    def test_arithmetic_verifier_rejects_wrong_calculation(self) -> None:
+        contract = TaskContract(goal="calculate 2 + 3", mode=Mode.BASIC)
+        profile = EvaluationProfile(dimensions=("mathematical_validity",), deterministic_checks=("arithmetic",))
+        evidence = run_deterministic_verifiers(contract, "2 + 3 = 6", profile)
+        self.assertEqual(len(evidence), 1)
+        self.assertEqual(evidence[0].result, "fail")
+        self.assertEqual(evidence[0].confidence, 1.0)
+
+    def test_python_verifier_never_executes_code(self) -> None:
+        contract = TaskContract(goal="write Python code")
+        profile = EvaluationProfile(dimensions=("code_correctness",), deterministic_checks=("python_syntax",))
+        evidence = run_deterministic_verifiers(contract, "```python\nprint('ok')\n```", profile)
+        self.assertEqual(evidence[0].result, "pass")
+
+    def test_json_verifier_checks_syntax(self) -> None:
+        contract = TaskContract(goal="return data", desired_format="JSON")
+        profile = EvaluationProfile(dimensions=("task_completion",), deterministic_checks=("json",))
+        good = run_deterministic_verifiers(contract, '{"ok": true}', profile)
+        bad = run_deterministic_verifiers(contract, '{"ok": }', profile)
+        self.assertEqual(good[0].result, "pass")
+        self.assertEqual(bad[0].result, "fail")
+
+    def test_profile_selects_deterministic_checks(self) -> None:
+        from engine.revise.profile import build_profile
+        math = build_profile(TaskContract(goal="calculate 12 + 5"))
+        python = build_profile(TaskContract(goal="implement a Python function"))
+        self.assertIn("arithmetic", math.deterministic_checks)
+        self.assertIn("python_syntax", python.deterministic_checks)
 
 
 if __name__ == "__main__":

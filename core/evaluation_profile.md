@@ -14,6 +14,12 @@ When a Task Contract carries an explicit `output_schema`, the profile selects th
 
 The schema verifier is preferred over model judgment for directly verifiable structural properties, but it does not replace semantic evaluation by the Secondary.
 
+## External source verification
+
+Research, source, citation, and factual tasks select `source_verification` as an external check while keeping `groundedness` and `evidence_quality` as model-evaluated dimensions. The source verifier checks only whether cited HTTP(S) sources are reachable; it does **not** claim that a source proves the candidate's factual statements. Missing citations fail closed when the Task Contract explicitly requires citations.
+
+External checks are bounded by the verification budget and use provider-neutral evidence. Unsafe/private network targets are rejected by the default HTTP source fetcher.
+
 ## Principles
 
 - Do not run every possible evaluator on every task.
@@ -22,4 +28,4 @@ The schema verifier is preferred over model judgment for directly verifiable str
 - Lite reduces effort, not correctness requirements.
 - Auto selects effort based on task characteristics and risk without changing intent.
 
-The runtime representation is `engine/revise/models.py`; profile construction is `engine/revise/profile.py`.
+The runtime representation is `engine/revise/models.py`; profile construction is `engine/revise/profile.py`; external source verification is implemented in `engine/revise/external.py`.

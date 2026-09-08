@@ -44,11 +44,12 @@ class EngineService:
         if not prompt:
             raise ValueError("prompt must not be empty")
         contract = make_contract(prompt, mode=request.mode)
-        primary_selection = request.primary_model or request.model
+        primary_selection = request.primary_model or request.model or (self.primary_router.default if self.primary_router else None)
+        secondary_selection = request.secondary_model or (self.secondary_router.default if self.secondary_router else None)
         primary = self.primary_router.resolve(primary_selection) if self.primary_router else None
-        secondary = self.secondary_router.resolve(request.secondary_model) if self.secondary_router else None
+        secondary = self.secondary_router.resolve(secondary_selection) if self.secondary_router else None
         _annotate_model(primary, primary_selection)
-        _annotate_model(secondary, request.secondary_model or (self.secondary_router.default if self.secondary_router else None))
+        _annotate_model(secondary, secondary_selection)
         result = self.engine.run(contract, primary=primary, secondary=secondary)
         version = result.final_version
         return EngineResponse(version.response if version else "", result.decision, version.id if version else None)
@@ -76,10 +77,7 @@ def create_default_service() -> EngineService:
 
     primary_router = ModelRouter({provider: lambda model, provider=provider: build_primary(provider, model) for provider in ("gemini", "openai", "grok", "ollama")}, default=ModelSelection(primary_provider, primary_model))
     secondary_router = SecondaryRouter({provider: lambda model, provider=provider: build_secondary(provider, model) for provider in ("gemini", "openai", "grok", "ollama")}, default=ModelSelection(secondary_provider, secondary_model))
-    return Engine(
-        FunctionPrimary(lambda _contract, _context: ""),
-        trace_sink=console_trace_sink,
-    ) if False else EngineService(
+    return EngineService(
         Engine(FunctionPrimary(lambda _contract, _context: ""), trace_sink=console_trace_sink),
         primary_router=primary_router,
         secondary_router=secondary_router,

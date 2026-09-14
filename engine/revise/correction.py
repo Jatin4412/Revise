@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .diagnosis import CorrectionRecommendation, Diagnosis, validate_diagnosis
+from .models import EvaluationResult
 
 
 @dataclass(frozen=True)
@@ -46,6 +47,7 @@ def correction_context(
     previous_response: str,
     *,
     diagnosis: Diagnosis | None = None,
+    evaluation: EvaluationResult | None = None,
 ) -> str:
     """Build bounded next-attempt context without exposing internal reasoning."""
     if recommendation == CorrectionRecommendation.CHANGE_APPROACH:
@@ -57,6 +59,18 @@ def correction_context(
     else:
         lead = "Revise the previous response using the evaluation feedback while preserving correct work."
     parts = [lead, previous_response]
+    if evaluation is not None:
+        if evaluation.issues:
+            parts.append("Issues:\n" + "\n".join(f"- {item.description}" for item in evaluation.issues))
+        dimension_feedback = tuple(
+            f"- {name}: {dimension.status}; score={dimension.score}; confidence={dimension.confidence}; reason={dimension.reason}"
+            for name, dimension in evaluation.dimensions.items()
+            if dimension.status in {"fail", "partial", "unknown"}
+        )
+        if dimension_feedback:
+            parts.append("Dimension feedback:\n" + "\n".join(dimension_feedback))
+        if evaluation.revision.instructions:
+            parts.append("Revision instructions:\n" + "\n".join(f"- {item}" for item in evaluation.revision.instructions))
     if diagnosis is not None and diagnosis.summary:
         parts.append("Correction focus: " + diagnosis.summary)
     return "\n\n".join(parts)

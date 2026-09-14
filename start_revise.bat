@@ -26,7 +26,6 @@ echo Available branches:
 echo.
 
 git fetch --prune origin >nul 2>&1
-
 set "COUNT=0"
 
 for /f "delims=" %%B in ('git branch -r --format="%%(refname:short)" ^| findstr /v /r "^origin/HEAD"') do (
@@ -38,11 +37,9 @@ for /f "delims=" %%B in ('git branch -r --format="%%(refname:short)" ^| findstr 
 echo.
 echo X^) Exit
 echo.
-
 set /p "CHOICE=Select branch: "
 
 if /i "%CHOICE%"=="X" goto :close
-
 if not defined BRANCH[%CHOICE%] (
     echo.
     echo Invalid selection.
@@ -72,18 +69,17 @@ if exist "%ENV_BACKUP%" (
     del /Q "%ENV_BACKUP%"
 )
 
+:ready
+cls
 echo.
 echo ============================
-echo      BRANCH READY
+echo      REVISE - %SELECTED%
 echo ============================
 echo.
-echo Branch: %SELECTED%
-echo.
-echo R^) Run engine + web
-echo T^) Run engine tests
+echo R^) Run engine + browser UI
+echo T^) Run all engine tests
 echo X^) Exit
 echo.
-
 choice /c RTX /n /m "Select: "
 
 if errorlevel 3 goto :close
@@ -91,53 +87,51 @@ if errorlevel 2 goto :tests
 if errorlevel 1 goto :run
 
 :tests
+cls
 echo.
-echo Running engine test suite...
+echo ============================
+echo       ENGINE TESTS
+ echo ============================
 echo.
-
-python -m unittest discover -s engine -t . -p "test*.py" -v
+python -m engine.test_suite
 set "TEST_RESULT=%ERRORLEVEL%"
-
 echo.
 if "%TEST_RESULT%"=="0" (
     echo [OK] All engine tests passed.
 ) else (
-    echo [FAIL] Engine test suite failed. See output above.
+    echo [FAIL] Engine tests failed. See output above.
 )
-
 echo.
 pause
-goto :menu
+goto :ready
 
 :run
+cls
 echo.
-echo [OK] Running %SELECTED%
+echo ============================
+echo       REVISE RUNNING
+echo ============================
 echo.
-
-echo Starting engine...
+echo Branch: %SELECTED%
+echo.
+echo Starting engine console...
 start "Revise Engine" /D "%ROOT%" cmd /k python -m engine --serve
 
 timeout /t 2 /nobreak >nul
 
-echo Starting web...
+echo Starting browser UI console...
 start "Revise Web" /D "%WEB%" cmd /k npm run dev
 
 echo.
-echo ============================
-echo      REVISE RUNNING
-echo ============================
-echo.
-echo Branch: %SELECTED%
 echo Engine: http://127.0.0.1:8000
 echo Web:    http://localhost:3000
 echo.
-echo R = restart / choose branch
-echo X = close everything
+echo R = stop both + choose branch again
+echo X = stop both + exit launcher
 echo.
 
 :running
 choice /c RX /n /m "R=Restart  X=Close: "
-
 if errorlevel 2 goto :close
 if errorlevel 1 goto :restart
 
@@ -159,11 +153,9 @@ exit /b 0
 :git_error
 echo.
 echo [ERROR] Failed to update branch.
-
 if exist "%ENV_BACKUP%" (
     copy /Y "%ENV_BACKUP%" "%ROOT%\.env" >nul
     del /Q "%ENV_BACKUP%"
 )
-
 pause
 goto :menu

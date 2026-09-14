@@ -81,8 +81,8 @@ class Engine:
 
             stop_no_improvement = "stop_on_no_improvement" in profile.stopping_conditions and revision_assessment is not None and revision_assessment.status != "improved"
             if result.decision in (Decision.ACCEPT, Decision.ASK) or stop_no_improvement:
-                final = self._best_version(versions)
                 final_decision = result.decision if not stop_no_improvement else Decision.ASK
+                final = None if final_decision is Decision.ASK else self._best_version(versions)
                 self._emit(trace, "final", "selected", version=final.id if final else None, decision=final_decision.value)
                 return EngineResult(final_decision, final, tuple(versions), contract, profile, trace.snapshot())
 

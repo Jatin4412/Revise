@@ -104,7 +104,7 @@ Best Valid Version
 - `engine/revise/correction.py` provides bounded correction primitives.
 - Baseline diagnosis is conservative/deterministic from current observations; future diagnostic providers may be layered behind the same advisory contract.
 - `REVISE` uses existing revision machinery.
-- `VERIFY` uses existing verification machinery and verification budget.
+- `VERIFY` uses existing verification machinery and verification budget; the budget is scoped to each evaluation attempt, so a VERIFY recommendation preserves the configured bounded verification capacity for the next attempt rather than being erased by steps already consumed while evaluating the current attempt.
 - `CHANGE_APPROACH` creates a lightweight new approach identity and a materially different correction instruction; it does not introduce a Strategy framework.
 - `ASK` terminates when existing Decision requires it.
 - Existing Decision remains the only acceptance authority.
@@ -183,9 +183,11 @@ Do not add in Phase-F:
 
 ## Current Phase-F status
 - PR #4 / branch `phase-f-diagnosis-foundation` contains the minimal Diagnosis contract and authority-boundary tests.
-- `engine/revise/correction.py` has now been added with bounded diagnosis-to-correction primitives.
-- `engine/engine.py` has now been integrated with Diagnosis, correction metadata, lightweight approach tracking, correction context, safe diagnosis/correction trace events, and terminal ASK output protection.
-- Full repository test execution remains to be performed in an environment with the repository available locally; do not claim green without actually running it.
+- `engine/revise/correction.py` has bounded diagnosis-to-correction primitives.
+- `engine/engine.py` integrates Diagnosis, correction metadata, lightweight approach tracking, correction context, safe diagnosis/correction trace events, and terminal ASK output protection.
+- VERIFY correction now preserves the configured per-attempt verification capacity for the next bounded attempt instead of being downgraded merely because the current attempt already consumed its verification steps.
+- `engine/test_phase_f_verify_correction.py` covers the verification-focused correction lifecycle.
+- Full repository test execution remains to be performed in an environment with the repository available locally; do not claim green without actually running it. GitHub Actions currently reports no workflow runs for this branch.
 
 ## Working procedure
 1. Read this file first.

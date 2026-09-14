@@ -155,7 +155,11 @@ class Engine:
 
         diagnosis = infer_diagnosis(contract, result, profile, revision_assessment=revision_assessment, previous_recommendation=previous_recommendation)
         self._emit(trace, "diagnosis", diagnosis.recommended_correction.value, status=diagnosis.status, confidence=diagnosis.confidence, failure_categories=",".join(diagnosis.failure_categories), affected_dimensions=",".join(diagnosis.affected_dimensions))
-        correction = choose_correction(diagnosis, current_approach_id=approach_id, remaining_revisions=max(0, profile.max_revisions - revisions_used), remaining_verification_steps=verification_budget)
+        # Verification budget is scoped to this evaluation attempt. A VERIFY
+        # correction therefore reserves the same bounded verification capacity
+        # for the next attempt rather than treating the current attempt's
+        # already-consumed steps as a permanent exhaustion signal.
+        correction = choose_correction(diagnosis, current_approach_id=approach_id, remaining_revisions=max(0, profile.max_revisions - revisions_used), remaining_verification_steps=profile.max_verification_steps)
         result = decide(contract, profile, result, revisions_used=revisions_used, revision_assessment=revision_assessment)
         return result, revision_assessment, diagnosis, correction
 

@@ -108,10 +108,11 @@ Best Valid Version
 - `CHANGE_APPROACH` creates a lightweight new approach identity and a materially different correction instruction; it does not introduce a Strategy framework.
 - `ASK` terminates when existing Decision requires it.
 - Existing Decision remains the only acceptance authority.
+- Correction context preserves the previous evaluation's issue, dimension, and revision feedback instead of replacing it with generic Phase-F text.
 
 ### Approach tracking
 - Approach identity is lightweight metadata (`approach-0`, `approach-1`, ...), attached to versions/traces.
-- `CHANGE_APPROACH` increments approach identity and changes the next-attempt correction context.
+- `CHANGE_APPROACH` increments approach identity before the next Primary attempt is generated.
 - Approach identity is not claimed to be perfect semantic classification; it records a bounded requested/material change in correction path.
 - A changed approach is never treated as automatic improvement.
 
@@ -121,6 +122,7 @@ Best Valid Version
 - Required evidence remains authoritative.
 - A new candidate after `CHANGE_APPROACH` must independently pass authoritative checks.
 - A diagnosis recommending `ACCEPT_CANDIDATE` cannot turn a failing hard gate/verifier into `ACCEPT`.
+- The evaluator's `EvaluationResult.decision` is provisional; the engine establishes the authoritative Decision before Diagnosis interprets the attempt.
 
 ### Bounded execution
 - Use existing revision/verification budgets and stopping conditions.
@@ -132,8 +134,8 @@ Best Valid Version
 - Every corrected candidate goes through existing Revision Assessment.
 - `CHANGE_APPROACH` does not bypass unchanged/regressed rejection.
 - A worse approach is rejected and cannot displace a stronger valid version.
-- Best-valid-version selection remains authoritative.
-- Terminal ASK exposes no rejected candidate.
+- Best-valid-version selection remains authoritative internally.
+- Terminal ASK exposes no rejected candidate as `final_version`, even when an internal best historical candidate exists.
 
 ### Trace
 Phase-F trace may safely expose metadata for:
@@ -154,7 +156,7 @@ Never expose prompts, raw responses, credentials, or sensitive payloads.
 ## Phase-F test contract
 At minimum prove:
 1. bad attempt -> `CHANGE_APPROACH` -> different approach -> improved attempt -> `ACCEPT`.
-2. bad attempt -> `CHANGE_APPROACH` -> worse attempt -> regression -> previous best retained.
+2. bad attempt -> `CHANGE_APPROACH` -> worse attempt -> regression -> previous best retained internally and not exposed on terminal ASK.
 3. repeated same-approach failure is bounded by existing budgets/stopping conditions.
 4. missing critical context -> `ASK` -> rejected candidate never exposed.
 5. model pass + `ACCEPT_CANDIDATE` + deterministic fail -> not accepted.
@@ -166,6 +168,8 @@ At minimum prove:
 11. changed approach without improvement is not successful.
 12. hard gates and deterministic verifiers are rerun/reenforced after approach change where applicable.
 13. best-valid-version survives all rejected/regressed corrections.
+14. evaluator provisional ACCEPT cannot cause Diagnosis to describe a failed candidate as acceptance-ready.
+15. correction context retains actionable evaluator feedback for the next attempt.
 
 ## Explicit Phase-F non-goals
 Do not add in Phase-F:
@@ -183,13 +187,24 @@ Do not add in Phase-F:
 
 ## Current Phase-F status
 - PR #4 / branch `phase-f-diagnosis-foundation` contains the minimal Diagnosis contract and authority-boundary tests.
-- `engine/revise/correction.py` has bounded diagnosis-to-correction primitives.
+- `engine/revise/correction.py` has bounded diagnosis-to-correction primitives and now preserves evaluation feedback in correction context.
 - `engine/engine.py` integrates Diagnosis, correction metadata, lightweight approach tracking, correction context, safe diagnosis/correction trace events, and terminal ASK output protection.
-- VERIFY correction now preserves the configured per-attempt verification capacity for the next bounded attempt instead of being downgraded merely because the current attempt already consumed its verification steps.
+- The engine now establishes the authoritative Decision before running Diagnosis, preventing provisional evaluator ACCEPT values from masking failed dimensions/evidence.
+- RevisionAssessment issue collections remain stable string identities; Diagnosis consumes those identities directly rather than treating them as Issue objects.
+- VERIFY correction preserves the configured per-attempt verification capacity for the next bounded attempt instead of being downgraded merely because the current attempt already consumed its verification steps.
 - `engine/test_phase_f_verify_correction.py` exercises VERIFY through the provider-neutral verifier machinery and confirms verifier evidence is re-evaluated on the next attempt.
 - `engine/test_phase_f_deterministic_recheck.py` confirms deterministic verification is independently rerun after an approach change.
-- `engine/test_phase_f_best_version.py` covers a multi-attempt regression and confirms the strongest non-regressed candidate remains the best selectable version while terminal ASK exposes no candidate.
-- Full repository test execution remains to be performed in an environment with the repository available locally; do not claim green without actually running it. GitHub Actions currently reports no workflow runs for this branch.
+- `engine/test_phase_f_best_version.py` covers a multi-attempt regression and confirms the strongest non-regressed candidate remains the best selectable internal version while terminal ASK exposes no candidate.
+- CI engine discovery uses package-aware unittest discovery: `python -m unittest discover -s engine -t . -p 'test*.py' -v`.
+- Full repository test execution must be verified from a local checkout or successful GitHub Actions run; do not claim green without actually running it.
+
+## Agent execution workflow
+- The user maintains a local **agent MD file** used directly to run/coordinate agent work.
+- Treat that agent MD file as an execution workflow input when the user provides or references it; do not assume it is foundation-owned.
+- The launcher/workflow should provide a direct **test-check option** so engine tests can be run without starting the web UI.
+- Preferred engine test command: `python -m unittest discover -s engine -t . -p "test*.py" -v` from the repository root.
+- A test-check path should report pass/fail and return to the launcher menu rather than starting or leaving the engine/web services running.
+- Do not let the test option silently switch away from the branch the user selected; tests should run against the currently selected/synchronized branch.
 
 ## Working procedure
 1. Read this file first.

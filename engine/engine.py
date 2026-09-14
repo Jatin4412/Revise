@@ -7,6 +7,7 @@ from .execution import ExecutionTrace, TraceEvent
 from .providers import Primary, Secondary, Verifier
 from .revise.correction import Correction, correction_context, diagnose_result, choose_correction
 from .revise.decision import decide
+from .revise.diagnosis import Diagnosis
 from .revise.evaluator import evaluate, validate_evaluation_result
 from .revise.evidence import fuse_evidence
 from .revise.external import run_external_verifiers
@@ -46,7 +47,7 @@ class Engine:
         previous: Version | None = None
         approach_id = "approach-0"
         pending_correction: Correction | None = None
-        pending_diagnosis = None
+        pending_diagnosis: Diagnosis | None = None
         trace = ExecutionTrace()
         self._emit(trace, "request", "received", mode=contract.mode.value)
         self._emit(trace, "contract", "created", requirements=len(contract.requirements), constraints=len(contract.constraints))
@@ -91,13 +92,14 @@ class Engine:
             if correction.approach_changed:
                 approach_id = correction.approach_id
             self._emit(trace, "correction", correction.recommendation.value, version=version.id, approach=approach_id, approach_changed=correction.approach_changed)
+            self._emit(trace, "revision", "requested", from_version=version.id, next_version=f"v{len(versions)}", correction=correction.recommendation.value, approach=correction.approach_id)
             previous = version
 
         final = self._best_version(versions)
         self._emit(trace, "final", "selected", version=final.id if final else None, decision=Decision.REVISE.value)
         return EngineResult(Decision.REVISE, final, tuple(versions), contract, profile, trace.snapshot())
 
-    def _evaluate(self, contract: TaskContract, response: str, profile: EvaluationProfile, *, secondary: Secondary | None, evidence: Iterable[Evidence], revisions_used: int, baseline: EvaluationResult | None, approach_id: str, trace: ExecutionTrace) -> tuple[EvaluationResult, RevisionAssessment | None, object, Correction]:
+    def _evaluate(self, contract: TaskContract, response: str, profile: EvaluationProfile, *, secondary: Secondary | None, evidence: Iterable[Evidence], revisions_used: int, baseline: EvaluationResult | None, approach_id: str, trace: ExecutionTrace) -> tuple[EvaluationResult, RevisionAssessment | None, Diagnosis, Correction]:
         if secondary is not None:
             self._emit(trace, "secondary", "start", provider=_provider_name(secondary), model=_model_name(secondary))
         try:

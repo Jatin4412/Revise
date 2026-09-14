@@ -28,6 +28,17 @@ class ScriptedSecondary:
         return result
 
 
+class ScriptedVerifier:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def verify(self, contract: TaskContract, response: str, profile: EvaluationProfile) -> tuple[Evidence, ...]:
+        del contract, profile
+        self.calls += 1
+        result = "fail" if response == "evidence-limited answer" else "pass"
+        return (Evidence("scripted.verifier", "external", result, 1.0, ("verify_attempt", str(self.calls))),)
+
+
 def profile() -> EvaluationProfile:
     return EvaluationProfile(
         dimensions=("correctness",),
@@ -54,11 +65,12 @@ class PhaseFVerifyCorrectionTests(unittest.TestCase):
     def test_verify_recommendation_survives_current_attempt_budget_and_guides_next_attempt(self) -> None:
         primary = ScriptedPrimary(["evidence-limited answer", "verified answer"])
         secondary = ScriptedSecondary([
-            result(0.80, (Evidence("source", "external", "fail", 0.95, ("source_unreachable",)),)),
-            result(0.95, (Evidence("source", "external", "pass", 0.95, ("source_reachable",)),)),
+            result(0.80, ()),
+            result(0.95, ()),
         ])
+        verifier = ScriptedVerifier()
 
-        outcome = Engine(primary, secondary=secondary).run(TaskContract(goal="answer with evidence"), profile=profile())
+        outcome = Engine(primary, secondary=secondary, verifier=verifier).run(TaskContract(goal="answer with evidence"), profile=profile())
 
         self.assertEqual(outcome.decision, Decision.ACCEPT)
         self.assertEqual(len(outcome.versions), 2)
@@ -67,6 +79,15 @@ class PhaseFVerifyCorrectionTests(unittest.TestCase):
         self.assertEqual(outcome.versions[1].metadata["correction"], CorrectionRecommendation.VERIFY.value)
         self.assertIn("evidence and verification", primary.calls[1] or "")
         self.assertEqual(outcome.versions[1].metadata["revision_assessment"].status, "improved")
+        self.assertEqual(verifier.calls, 2)
+        self.assertEqual(
+            [e.result for e in outcome.versions[0].evaluation.evidence if e.source == "scripted.verifier"],
+            ["fail"],
+        )
+        self.assertEqual(
+            [e.result for e in outcome.versions[1].evaluation.evidence if e.source == "scripted.verifier"],
+            ["pass"],
+        )
 
 
 if __name__ == "__main__":

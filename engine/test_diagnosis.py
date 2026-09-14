@@ -1,7 +1,7 @@
 import math
 import unittest
 
-from engine.revise.diagnosis import CorrectionRecommendation, Diagnosis, validate_diagnosis
+from engine.revise.diagnosis import CorrectionRecommendation, Diagnosis, infer_diagnosis, validate_diagnosis
 from engine.revise.decision import decide
 from engine.revise.models import Decision, DimensionResult, EvaluationProfile, EvaluationResult, Evidence, Issue, Severity, TaskContract
 
@@ -43,6 +43,25 @@ class DiagnosisFoundationTests(unittest.TestCase):
             evidence_basis=("evaluation:correctness",),
         )
         self.assertIs(validate_diagnosis(diagnosis), diagnosis)
+
+    def test_inferred_verification_diagnoses_have_string_evidence_basis(self):
+        profile = self._passing_profile()
+        contract = TaskContract(goal="calculate")
+        deterministic_result = self._passing_result(
+            evidence=(Evidence("arithmetic", "deterministic", "fail", 1.0, ("arithmetic", "expression_check")),)
+        )
+        diagnosis = infer_diagnosis(contract, deterministic_result, profile)
+        self.assertEqual(diagnosis.recommended_correction, CorrectionRecommendation.CHANGE_APPROACH)
+        self.assertIs(validate_diagnosis(diagnosis), diagnosis)
+        self.assertTrue(all(isinstance(item, str) for item in diagnosis.evidence_basis))
+
+        external_result = self._passing_result(
+            evidence=(Evidence("source", "external", "fail", 1.0, ("source", "reachability")),)
+        )
+        diagnosis = infer_diagnosis(contract, external_result, profile)
+        self.assertEqual(diagnosis.recommended_correction, CorrectionRecommendation.VERIFY)
+        self.assertIs(validate_diagnosis(diagnosis), diagnosis)
+        self.assertTrue(all(isinstance(item, str) for item in diagnosis.evidence_basis))
 
     def test_low_confidence_diagnosis_fails_closed(self):
         diagnosis = Diagnosis("actionable", "uncertain diagnosis", confidence=0.59)

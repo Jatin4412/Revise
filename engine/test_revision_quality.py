@@ -123,8 +123,11 @@ class RevisionQualityAdversarialTests(unittest.TestCase):
             ),
         )
         self.assertEqual(result.decision, Decision.ASK)
-        self.assertEqual(result.final_version.id, "v0")
-        self.assertEqual(result.final_version.response, "better")
+        self.assertIsNone(result.final_version)
+        best = Engine._best_version(list(result.versions))
+        self.assertIsNotNone(best)
+        self.assertEqual(best.id, "v0")
+        self.assertEqual(best.response, "better")
         self.assertEqual(result.versions[1].metadata["revision_assessment"].status, "regressed")
 
 

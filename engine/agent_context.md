@@ -186,7 +186,9 @@ Do not add in Phase-F:
 - `engine/revise/correction.py` has bounded diagnosis-to-correction primitives.
 - `engine/engine.py` integrates Diagnosis, correction metadata, lightweight approach tracking, correction context, safe diagnosis/correction trace events, and terminal ASK output protection.
 - VERIFY correction now preserves the configured per-attempt verification capacity for the next bounded attempt instead of being downgraded merely because the current attempt already consumed its verification steps.
-- `engine/test_phase_f_verify_correction.py` covers the verification-focused correction lifecycle.
+- `engine/test_phase_f_verify_correction.py` exercises VERIFY through the provider-neutral verifier machinery and confirms verifier evidence is re-evaluated on the next attempt.
+- `engine/test_phase_f_deterministic_recheck.py` confirms deterministic verification is independently rerun after an approach change.
+- `engine/test_phase_f_best_version.py` covers a multi-attempt regression and confirms the strongest non-regressed candidate remains the best selectable version while terminal ASK exposes no candidate.
 - Full repository test execution remains to be performed in an environment with the repository available locally; do not claim green without actually running it. GitHub Actions currently reports no workflow runs for this branch.
 
 ## Working procedure

@@ -1,4 +1,8 @@
-"""Single entry point for the complete Revise engine test suite."""
+"""Single entry point for the complete Revise engine test suite.
+
+The launcher uses this module for automated engine checks; individual test
+modules remain the authoritative test implementations.
+"""
 
 from __future__ import annotations
 

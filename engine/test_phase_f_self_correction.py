@@ -75,7 +75,7 @@ class PhaseFSelfCorrectionTests(unittest.TestCase):
     def test_worse_changed_approach_is_regression_and_does_not_replace_previous(self) -> None:
         primary = ScriptedPrimary(["first attempt", "worse different attempt"])
         secondary = ScriptedSecondary([
-            result(0.80, status="partial", issues=(Issue("quality", Severity.MODERATE, "needs work"),)),
+            result(0.80, status="partial", issues=(Issue("quality", Severity.CRITICAL, "needs work"),)),
             result(0.70, status="fail", issues=(Issue("quality", Severity.MAJOR, "worse"),)),
         ])
         engine = Engine(primary, secondary=secondary)
@@ -86,7 +86,8 @@ class PhaseFSelfCorrectionTests(unittest.TestCase):
         self.assertIsNone(outcome.final_version)
         self.assertEqual(len(outcome.versions), 2)
         self.assertEqual(outcome.versions[0].metadata["approach_id"], "approach-0")
-        self.assertEqual(outcome.versions[1].metadata["approach_id"], "approach-0")
+        self.assertEqual(outcome.versions[1].metadata["approach_id"], "approach-1")
+        self.assertTrue(outcome.versions[1].metadata["approach_changed"])
         self.assertEqual(outcome.versions[1].metadata["revision_assessment"].status, "regressed")
 
     def test_repeated_failure_stops_without_infinite_correction(self) -> None:

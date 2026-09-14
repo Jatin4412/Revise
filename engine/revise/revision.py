@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 from .models import EvaluationResult, Issue, Severity
@@ -60,18 +61,18 @@ def assess_revision(baseline: EvaluationResult | None, revised: EvaluationResult
 
     improved: list[str] = []
     regressed: list[str] = []
-    for name in set(baseline.dimensions) | set(revised.dimensions):
+    for name in sorted(set(baseline.dimensions) | set(revised.dimensions)):
         before = baseline.dimensions.get(name)
         after = revised.dimensions.get(name)
-        if before is None or after is None:
+        if before is None:
+            continue
+        if after is None:
+            regressed.append(name)
             continue
         if _dimension_improved(before, after):
             improved.append(name)
         elif _dimension_regressed(before, after):
             regressed.append(name)
-
-    improved.sort()
-    regressed.sort()
 
     net_improvement = score_delta
     material_introduced = any(revised_issues[key].severity in _MATERIAL_SEVERITIES for key in introduced)
@@ -111,8 +112,15 @@ def assess_revision(baseline: EvaluationResult | None, revised: EvaluationResult
 
 
 def _issue_key(issue: Issue) -> str:
-    """Identify the same issue across revisions without encoding its changing severity."""
-    return f"{issue.type}|{issue.location or ''}|{issue.description.strip().lower()}"
+    """Identify the same issue across revisions without encoding changing severity."""
+    normalized_type = _normalize_text(issue.type)
+    normalized_location = _normalize_text(issue.location or "")
+    normalized_description = _normalize_text(issue.description)
+    return f"{normalized_type}|{normalized_location}|{normalized_description}"
+
+
+def _normalize_text(value: str) -> str:
+    return re.sub(r"\s+", " ", value.strip().lower())
 
 
 def _dimension_improved(before, after) -> bool:

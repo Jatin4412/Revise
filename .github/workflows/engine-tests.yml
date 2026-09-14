@@ -17,4 +17,4 @@ jobs:
         with:
           python-version: '3.12'
       - name: Run engine test suite
-        run: python -m unittest discover -s engine -p 'test*.py' -v
+        run: python -m unittest discover -s engine -t . -p 'test*.py' -v

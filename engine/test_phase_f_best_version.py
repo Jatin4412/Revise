@@ -80,7 +80,16 @@ class PhaseFBestVersionTests(unittest.TestCase):
             result(0.60, "fail", Issue("quality", Severity.MODERATE, "still wrong")),
         ])
 
-        outcome = Engine(primary, secondary=secondary).run(TaskContract(goal="solve the task"), profile=profile())
+        terminal_profile = EvaluationProfile(
+            dimensions=("correctness",),
+            required_dimensions=("correctness",),
+            minimum_scores={"correctness": 0.70},
+            minimum_overall_score=0.95,
+            minimum_confidence=0.60,
+            max_revisions=1,
+            max_verification_steps=0,
+        )
+        outcome = Engine(primary, secondary=secondary).run(TaskContract(goal="solve the task"), profile=terminal_profile)
 
         self.assertEqual(outcome.decision, Decision.ASK)
         self.assertIsNone(outcome.final_version)

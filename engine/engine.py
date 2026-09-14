@@ -154,7 +154,7 @@ class Engine:
             self._emit(trace, "revision", "assessed", revision_status=revision_assessment.status, score_delta=revision_assessment.score_delta, resolved_issues=len(revision_assessment.resolved_issues), introduced_issues=len(revision_assessment.introduced_issues), improved_dimensions=len(revision_assessment.improved_dimensions), regressed_dimensions=len(revision_assessment.regressed_dimensions))
 
         diagnosis = infer_diagnosis(contract, result, profile, revision_assessment=revision_assessment, previous_recommendation=previous_recommendation)
-        self._emit(trace, "diagnosis", diagnosis.recommended_correction.value, status=diagnosis.status, confidence=diagnosis.confidence, failure_categories=",".join(diagnosis.failure_categories), affected_dimensions=",".join(diagnosis.affected_dimensions))
+        self._emit(trace, "diagnosis", diagnosis.recommended_correction.value, diagnosis_status=diagnosis.status, confidence=diagnosis.confidence, failure_categories=",".join(diagnosis.failure_categories), affected_dimensions=",".join(diagnosis.affected_dimensions))
         # Verification budget is scoped to this evaluation attempt. A VERIFY
         # correction therefore reserves the same bounded verification capacity
         # for the next attempt rather than treating the current attempt's

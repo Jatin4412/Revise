@@ -117,8 +117,7 @@ class FoundationInvariantTests(unittest.TestCase):
     def test_regression_cannot_replace_best_version(self):
         primary = SequencePrimary(("good", "regressed"))
         secondary = SequenceSecondary((result(0.80), result(0.90, issues=(Issue("accuracy", Severity.MAJOR, "new error"),))))
-        engine = Engine(primary, secondary=secondary)
-        output = engine.run(TaskContract(goal="x"), profile=profile(max_revisions=1))
+        output = Engine(primary, secondary=secondary).run(TaskContract(goal="x"), profile=profile(max_revisions=1))
         self.assertEqual(output.decision, Decision.ASK)
         self.assertEqual(output.final_version.id, "v0")
         self.assertEqual(output.final_version.evaluation.overall_score, 0.80)
@@ -131,8 +130,7 @@ class FoundationInvariantTests(unittest.TestCase):
     def test_revision_budget_is_bounded(self):
         primary = SequencePrimary(("first", "second", "third"))
         secondary = SequenceSecondary((result(0.50), result(0.50), result(0.50)))
-        engine = Engine(primary, secondary=secondary)
-        output = engine.run(TaskContract(goal="x"), profile(max_revisions=1))
+        output = Engine(primary, secondary=secondary).run(TaskContract(goal="x"), profile=profile(max_revisions=1))
         self.assertEqual(primary.calls, 2)
         self.assertEqual(len(output.versions), 2)
         self.assertEqual(output.decision, Decision.ASK)
@@ -141,11 +139,11 @@ class FoundationInvariantTests(unittest.TestCase):
         contract = TaskContract(goal="calculate 25 * 17")
         primary = SequencePrimary(("426",))
         secondary = SequenceSecondary((result(0.99),))
-        engine = Engine(primary, secondary=secondary)
-        output = engine.run(contract, profile(max_revisions=0, max_verification_steps=0))
+        output = Engine(primary, secondary=secondary).run(contract, profile=profile(max_revisions=0, max_verification_steps=0))
         verifier_events = [event for event in output.trace if event.stage == "verifier"]
-        self.assertFalse(verifier_events)
-        self.assertEqual(output.decision, Decision.ACCEPT)
+        self.assertTrue(verifier_events)
+        self.assertTrue(any(event.details.get("steps_used") == 0 for event in verifier_events))
+        self.assertEqual(output.decision, Decision.ASK)
 
     def test_roles_are_provider_agnostic(self):
         primary = FunctionPrimary(lambda contract, context: "answer")
@@ -156,16 +154,15 @@ class FoundationInvariantTests(unittest.TestCase):
         secondary.model = "model-b"
         output = Engine(primary, secondary=secondary).run(TaskContract(goal="x"), profile=profile(max_revisions=0))
         self.assertEqual(output.decision, Decision.ACCEPT)
-        self.assertEqual(output.trace[2].details["provider"], "provider-a")
+        primary_events = [event for event in output.trace if event.stage == "primary" and event.status == "start"]
+        self.assertEqual(primary_events[0].details["provider"], "provider-a")
+        self.assertEqual(primary_events[0].details["model"], "model-a")
 
     def test_explicit_model_selection_is_preserved(self):
-        created = []
-
         def factory(model):
             item = FunctionPrimary(lambda contract, context: "answer")
             item.provider = "test-provider"
             item.model = model
-            created.append(item)
             return item
 
         router = ModelRouter({"test-provider": factory}, default=ModelSelection("test-provider", "default-model"))

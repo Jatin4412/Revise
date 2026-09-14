@@ -91,6 +91,14 @@ def validate_diagnosis(
     return diagnosis
 
 
+def _evidence_label(evidence: object) -> str:
+    """Return a stable string label for evidence provenance in diagnosis metadata."""
+    provenance = getattr(evidence, "provenance", ())
+    if provenance:
+        return "/".join(str(item) for item in provenance)
+    return "/".join(str(item) for item in (getattr(evidence, "source", ""), getattr(evidence, "method", "")))
+
+
 def infer_diagnosis(
     contract: TaskContract,
     result: EvaluationResult,
@@ -136,7 +144,7 @@ def infer_diagnosis(
             ("deterministic_verification",),
             0.98,
             CorrectionRecommendation.CHANGE_APPROACH,
-            evidence_basis=tuple(e.provenance or (e.source, e.method) for e in deterministic_failures for _ in (0,)),
+            evidence_basis=tuple(_evidence_label(e) for e in deterministic_failures),
         )
 
     if external_failures:
@@ -146,7 +154,7 @@ def infer_diagnosis(
             ("external_verification",),
             0.90,
             CorrectionRecommendation.VERIFY,
-            evidence_basis=tuple(e.provenance or (e.source, e.method) for e in external_failures for _ in (0,)),
+            evidence_basis=tuple(_evidence_label(e) for e in external_failures),
         )
 
     unknown_dimensions = tuple(name for name, dimension in result.dimensions.items() if dimension.status == "unknown")

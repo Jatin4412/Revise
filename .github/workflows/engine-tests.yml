@@ -1,0 +1,20 @@
+name: Engine tests
+
+on:
+  push:
+    branches: [main, phase-f-diagnosis-foundation]
+  pull_request:
+    branches: [main]
+
+jobs:
+  engine-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run engine test suite
+        run: python -m unittest discover -s engine -p 'test*.py' -v

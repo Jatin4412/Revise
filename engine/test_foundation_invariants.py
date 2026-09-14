@@ -114,6 +114,28 @@ class FoundationInvariantTests(unittest.TestCase):
         decided = decide(TaskContract(goal="x"), profile(evidence_requirements=("arithmetic",)), result(0.99, evidence=evidence), revisions_used=0)
         self.assertEqual(decided.decision, Decision.REVISE)
 
+    def test_full_lifecycle_improves_then_accepts(self):
+        issue = Issue("accuracy", Severity.MAJOR, "wrong claim", "answer")
+        primary = SequencePrimary(("draft", "corrected"))
+        secondary = SequenceSecondary((result(0.70, issues=(issue,)), result(0.85)))
+        output = Engine(primary, secondary=secondary).run(TaskContract(goal="x"), profile=profile(max_revisions=1))
+        self.assertEqual(output.decision, Decision.ACCEPT)
+        self.assertEqual(len(output.versions), 2)
+        self.assertEqual(output.final_version.id, "v1")
+        self.assertEqual(output.versions[1].parent_id, "v0")
+        assessment = output.versions[1].metadata["revision_assessment"]
+        self.assertEqual(assessment.status, "improved")
+        self.assertEqual(assessment.resolved_issues, ("accuracy|answer|wrong claim",))
+
+    def test_missing_context_stays_ask_through_full_engine(self):
+        primary = SequencePrimary(("invented answer",))
+        secondary = SequenceSecondary((result(0.99),))
+        output = Engine(primary, secondary=secondary).run(
+            TaskContract(goal="Use the source", missing_context=("source",)),
+            profile(max_revisions=0),
+        )
+        self.assertEqual(output.decision, Decision.ASK)
+
     def test_regression_cannot_replace_best_version(self):
         primary = SequencePrimary(("good", "regressed"))
         secondary = SequenceSecondary((result(0.80), result(0.90, issues=(Issue("accuracy", Severity.MAJOR, "new error"),))))
@@ -139,7 +161,10 @@ class FoundationInvariantTests(unittest.TestCase):
         contract = TaskContract(goal="calculate 25 * 17")
         primary = SequencePrimary(("426",))
         secondary = SequenceSecondary((result(0.99),))
-        output = Engine(primary, secondary=secondary).run(contract, profile=profile(max_revisions=0, max_verification_steps=0))
+        output = Engine(primary, secondary=secondary).run(
+            contract,
+            profile(max_revisions=0, max_verification_steps=0, deterministic_checks=("arithmetic",)),
+        )
         verifier_events = [event for event in output.trace if event.stage == "verifier"]
         self.assertTrue(verifier_events)
         self.assertTrue(any(event.details.get("steps_used") == 0 for event in verifier_events))

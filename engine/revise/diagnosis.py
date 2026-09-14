@@ -169,7 +169,7 @@ def infer_diagnosis(
             0.90,
             CorrectionRecommendation.CHANGE_APPROACH,
             affected_dimensions=revision_assessment.regressed_dimensions,
-            affected_issues=tuple(issue.type for issue in revision_assessment.introduced_issues),
+            affected_issues=revision_assessment.introduced_issues,
             evidence_basis=("revision_assessment",),
         )
 

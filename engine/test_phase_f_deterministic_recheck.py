@@ -27,9 +27,9 @@ class ScriptedSecondary:
         self.calls += 1
         return EvaluationResult(
             Decision.ACCEPT,
+            0.95 if self.calls == 2 else 0.80,
             0.95,
-            0.95,
-            {"correctness": DimensionResult(0.95, 0.95, "pass", "scripted")},
+            {"correctness": DimensionResult(0.95 if self.calls == 2 else 0.80, 0.95, "pass", "scripted")},
         )
 
 

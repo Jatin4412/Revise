@@ -5,9 +5,9 @@ from typing import Callable, Iterable
 
 from .execution import ExecutionTrace, TraceEvent
 from .providers import Primary, Secondary, Verifier
-from .revise.correction import Correction, correction_context, diagnose_result, choose_correction
+from .revise.correction import Correction, correction_context, choose_correction
 from .revise.decision import decide
-from .revise.diagnosis import Diagnosis
+from .revise.diagnosis import CorrectionRecommendation, Diagnosis, infer_diagnosis
 from .revise.evaluator import evaluate, validate_evaluation_result
 from .revise.evidence import fuse_evidence
 from .revise.external import run_external_verifiers
@@ -69,7 +69,7 @@ class Engine:
                 raise
             self._emit(trace, "primary", "complete", provider=_provider_name(active_primary), model=_model_name(active_primary), version=version_id, response_length=len(response))
             version = Version(version_id, response, parent_id=previous.id if previous else None, metadata={"approach_id": approach_id, "approach_changed": pending_correction.approach_changed if pending_correction else False, "correction": pending_correction.recommendation.value if pending_correction else None})
-            result, revision_assessment, diagnosis, correction = self._evaluate(contract, response, profile, secondary=active_secondary, evidence=supplied_evidence, revisions_used=revision_index, baseline=previous.evaluation if previous else None, approach_id=approach_id, trace=trace)
+            result, revision_assessment, diagnosis, correction = self._evaluate(contract, response, profile, secondary=active_secondary, evidence=supplied_evidence, revisions_used=revision_index, baseline=previous.evaluation if previous else None, approach_id=approach_id, previous_recommendation=pending_correction.recommendation if pending_correction else None, trace=trace)
             metadata = dict(version.metadata)
             if revision_assessment is not None:
                 metadata["revision_assessment"] = revision_assessment
@@ -99,7 +99,7 @@ class Engine:
         self._emit(trace, "final", "selected", version=final.id if final else None, decision=Decision.REVISE.value)
         return EngineResult(Decision.REVISE, final, tuple(versions), contract, profile, trace.snapshot())
 
-    def _evaluate(self, contract: TaskContract, response: str, profile: EvaluationProfile, *, secondary: Secondary | None, evidence: Iterable[Evidence], revisions_used: int, baseline: EvaluationResult | None, approach_id: str, trace: ExecutionTrace) -> tuple[EvaluationResult, RevisionAssessment | None, Diagnosis, Correction]:
+    def _evaluate(self, contract: TaskContract, response: str, profile: EvaluationProfile, *, secondary: Secondary | None, evidence: Iterable[Evidence], revisions_used: int, baseline: EvaluationResult | None, approach_id: str, previous_recommendation: CorrectionRecommendation | None, trace: ExecutionTrace) -> tuple[EvaluationResult, RevisionAssessment | None, Diagnosis, Correction]:
         if secondary is not None:
             self._emit(trace, "secondary", "start", provider=_provider_name(secondary), model=_model_name(secondary))
         try:
@@ -153,7 +153,7 @@ class Engine:
         if revision_assessment is not None:
             self._emit(trace, "revision", "assessed", revision_status=revision_assessment.status, score_delta=revision_assessment.score_delta, resolved_issues=len(revision_assessment.resolved_issues), introduced_issues=len(revision_assessment.introduced_issues), improved_dimensions=len(revision_assessment.improved_dimensions), regressed_dimensions=len(revision_assessment.regressed_dimensions))
 
-        diagnosis = diagnose_result(result, profile, missing_context=bool(contract.missing_context))
+        diagnosis = infer_diagnosis(contract, result, profile, revision_assessment=revision_assessment, previous_recommendation=previous_recommendation)
         self._emit(trace, "diagnosis", diagnosis.recommended_correction.value, status=diagnosis.status, confidence=diagnosis.confidence, failure_categories=",".join(diagnosis.failure_categories), affected_dimensions=",".join(diagnosis.affected_dimensions))
         correction = choose_correction(diagnosis, current_approach_id=approach_id, remaining_revisions=max(0, profile.max_revisions - revisions_used), remaining_verification_steps=verification_budget)
         result = decide(contract, profile, result, revisions_used=revisions_used, revision_assessment=revision_assessment)

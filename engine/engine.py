@@ -57,7 +57,12 @@ class Engine:
             if previous is None:
                 context = initial_context
             elif pending_correction is not None:
-                context = correction_context(pending_correction.recommendation, previous.response, diagnosis=pending_diagnosis)
+                context = correction_context(
+                    pending_correction.recommendation,
+                    previous.response,
+                    diagnosis=pending_diagnosis,
+                    evaluation=previous.evaluation,
+                )
             else:
                 context = self._revision_context(previous)
             version_id = f"v{len(versions)}"
@@ -153,6 +158,10 @@ class Engine:
         if revision_assessment is not None:
             self._emit(trace, "revision", "assessed", revision_status=revision_assessment.status, score_delta=revision_assessment.score_delta, resolved_issues=len(revision_assessment.resolved_issues), introduced_issues=len(revision_assessment.introduced_issues), improved_dimensions=len(revision_assessment.improved_dimensions), regressed_dimensions=len(revision_assessment.regressed_dimensions))
 
+        # The evaluator's Decision is provisional. The existing Decision policy
+        # is the sole authority for the candidate's actual state. Diagnosis is
+        # deliberately run only after that authoritative decision is known.
+        result = decide(contract, profile, result, revisions_used=revisions_used, revision_assessment=revision_assessment)
         diagnosis = infer_diagnosis(contract, result, profile, revision_assessment=revision_assessment, previous_recommendation=previous_recommendation)
         self._emit(trace, "diagnosis", diagnosis.recommended_correction.value, diagnosis_status=diagnosis.status, confidence=diagnosis.confidence, failure_categories=",".join(diagnosis.failure_categories), affected_dimensions=",".join(diagnosis.affected_dimensions))
         # Verification budget is scoped to this evaluation attempt. A VERIFY
@@ -160,7 +169,6 @@ class Engine:
         # for the next attempt rather than treating the current attempt's
         # already-consumed steps as a permanent exhaustion signal.
         correction = choose_correction(diagnosis, current_approach_id=approach_id, remaining_revisions=max(0, profile.max_revisions - revisions_used), remaining_verification_steps=profile.max_verification_steps)
-        result = decide(contract, profile, result, revisions_used=revisions_used, revision_assessment=revision_assessment)
         return result, revision_assessment, diagnosis, correction
 
     def _emit(self, trace: ExecutionTrace, stage: str, event_status: str, **details: object) -> None:

@@ -1,101 +1,169 @@
 @echo off
-setlocal
+setlocal EnableExtensions EnableDelayedExpansion
 
-title Revise - Update and Start
-cd /d "C:\Users\jatin\OneDrive\Desktop\Projects\Revise"
+title Revise - Launcher
 
-set "ROOT=%CD%"
+set "ROOT=C:\Users\jatin\OneDrive\Desktop\Projects\Revise"
 set "WEB=%ROOT%\web"
-set "ENV_BACKUP=%TEMP%\Revise_env_backup"
+set "ENV_BACKUP=%TEMP%\Revise_env_backup_%RANDOM%.env"
 
-if not exist "%WEB%" (
-    echo [ERROR] Web directory not found: "%WEB%"
+cd /d "%ROOT%"
+
+if not exist "%ROOT%\.git" (
+    echo [ERROR] Git repository not found.
     pause
     exit /b 1
 )
 
+:menu
+cls
 echo.
-echo ==========================================
-echo       REVISE - UPDATE AND START
-echo ==========================================
+echo ============================
+echo        REVISE
+echo ============================
+echo.
+echo Available branches:
 echo.
 
-echo [1/6] Checking repository...
-git rev-parse --show-toplevel >nul 2>&1
-if errorlevel 1 (
-    echo [ERROR] This is not a Git repository: "%ROOT%"
-    pause
-    exit /b 1
+git fetch --prune origin >nul 2>&1
+
+set "COUNT=0"
+
+for /f "delims=" %%B in ('git branch -r --format="%%(refname:short)" ^| findstr /v /r "^origin/HEAD"') do (
+    set /a COUNT+=1
+    set "BRANCH[!COUNT!]=%%B"
+    echo !COUNT!^) %%B
 )
 
-echo [2/6] Saving local .env...
-if exist ".env" copy /Y ".env" "%ENV_BACKUP%" >nul
+echo.
+echo X^) Exit
+echo.
 
-echo [3/6] Fetching latest main...
-git fetch origin main
-if errorlevel 1 (
-    echo [ERROR] Failed to fetch origin/main.
-    goto :fail
+set /p "CHOICE=Select branch: "
+
+if /i "%CHOICE%"=="X" goto :close
+
+if not defined BRANCH[%CHOICE%] (
+    echo.
+    echo Invalid selection.
+    timeout /t 2 >nul
+    goto :menu
 )
 
-echo [4/6] Forcing local main to exact origin/main...
-git checkout -B main origin/main
-if errorlevel 1 (
-    echo [ERROR] Failed to align local main with origin/main.
-    goto :fail
-)
+set "SELECTED=!BRANCH[%CHOICE%]!"
+set "SELECTED=!SELECTED:origin/=!"
 
-git reset --hard origin/main
-if errorlevel 1 (
-    echo [ERROR] Failed to reset local main to origin/main.
-    goto :fail
-)
+echo.
+echo Updating %SELECTED%...
 
-echo [5/6] Restoring local .env...
+if exist "%ROOT%\.env" copy /Y "%ROOT%\.env" "%ENV_BACKUP%" >nul
+
+git reset --hard
+if errorlevel 1 goto :git_error
+
+git checkout -B "%SELECTED%" "origin/%SELECTED%"
+if errorlevel 1 goto :git_error
+
+git reset --hard "origin/%SELECTED%"
+if errorlevel 1 goto :git_error
+
 if exist "%ENV_BACKUP%" (
-    copy /Y "%ENV_BACKUP%" ".env" >nul
-    del /Q "%ENV_BACKUP%" >nul 2>&1
+    copy /Y "%ENV_BACKUP%" "%ROOT%\.env" >nul
+    del /Q "%ENV_BACKUP%"
 )
 
 echo.
-echo Verifying exact main state...
-git status --short --branch
-git rev-parse HEAD
-git rev-parse origin/main
+echo ============================
+echo      BRANCH READY
+echo ============================
+echo.
+echo Branch: %SELECTED%
+echo.
+echo R^) Run engine + web
+echo T^) Run engine tests
+echo X^) Exit
+echo.
 
-git merge-base --is-ancestor HEAD origin/main
-if errorlevel 1 (
-    echo [ERROR] Local main is not aligned with origin/main.
-    goto :fail_no_env
-)
-git diff --quiet HEAD origin/main
-if errorlevel 1 (
-    echo [ERROR] Local main differs from origin/main.
-    goto :fail_no_env
+choice /c RTX /n /m "Select: "
+
+if errorlevel 3 goto :close
+if errorlevel 2 goto :tests
+if errorlevel 1 goto :run
+
+:tests
+echo.
+echo Running engine test suite...
+echo.
+
+python -m unittest discover -s engine -t . -p "test*.py" -v
+set "TEST_RESULT=%ERRORLEVEL%"
+
+echo.
+if "%TEST_RESULT%"=="0" (
+    echo [OK] All engine tests passed.
+) else (
+    echo [FAIL] Engine test suite failed. See output above.
 )
 
-echo [6/6] Starting engine and web server...
-start "Revise Engine" cmd /k "cd /d %ROOT% && python -m engine --serve"
+echo.
+pause
+goto :menu
+
+:run
+echo.
+echo [OK] Running %SELECTED%
+echo.
+
+echo Starting engine...
+start "Revise Engine" /D "%ROOT%" cmd /k python -m engine --serve
 
 timeout /t 2 /nobreak >nul
 
-start "Revise Web" cmd /k "cd /d %WEB% && npm run dev"
+echo Starting web...
+start "Revise Web" /D "%WEB%" cmd /k npm run dev
 
 echo.
-echo ==========================================
+echo ============================
+echo      REVISE RUNNING
+echo ============================
+echo.
+echo Branch: %SELECTED%
 echo Engine: http://127.0.0.1:8000
 echo Web:    http://localhost:3000
-echo ==========================================
 echo.
+echo R = restart / choose branch
+echo X = close everything
+echo.
+
+:running
+choice /c RX /n /m "R=Restart  X=Close: "
+
+if errorlevel 2 goto :close
+if errorlevel 1 goto :restart
+
+:restart
+call :stop
+goto :menu
+
+:close
+call :stop
+echo.
+echo Revise closed.
 exit /b 0
 
-:fail
-if exist "%ENV_BACKUP%" (
-    copy /Y "%ENV_BACKUP%" ".env" >nul
-    del /Q "%ENV_BACKUP%" >nul 2>&1
-)
-:fail_no_env
+:stop
+taskkill /FI "WINDOWTITLE eq Revise Engine*" /T /F >nul 2>&1
+taskkill /FI "WINDOWTITLE eq Revise Web*" /T /F >nul 2>&1
+exit /b 0
+
+:git_error
 echo.
-echo [ERROR] Revise startup aborted.
+echo [ERROR] Failed to update branch.
+
+if exist "%ENV_BACKUP%" (
+    copy /Y "%ENV_BACKUP%" "%ROOT%\.env" >nul
+    del /Q "%ENV_BACKUP%"
+)
+
 pause
-exit /b 1
+goto :menu

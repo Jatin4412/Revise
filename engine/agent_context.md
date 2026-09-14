@@ -62,7 +62,8 @@ User -> Task Contract -> Mode/Profile -> Model Router -> Primary
 - Evaluator results are validated before evidence fusion/decision. Missing dimensions, invalid statuses, non-finite/out-of-range scores or confidence, and unexpected dimensions become a fail-closed unknown/ASK state.
 - `stopping_conditions` supports `stop_on_no_improvement`, which terminates further revision when the latest revision does not demonstrate improvement; unsupported stopping conditions are rejected at profile construction.
 - Best-version selection excludes revisions marked `regressed` or `unchanged`, preventing a rejected revision from displacing a stronger prior candidate.
-- Latest stabilization work fixes required-dimension uniqueness validation and external verifier registry semantics; external source-limit regression coverage now explicitly distinguishes deduplication from source-count overflow.
+- Evidence fusion now validates every evidence item before sorting or confidence aggregation; malformed types, results, metadata, provenance, and non-finite/out-of-range confidence fail closed instead of influencing acceptance.
+- Revision comparison now normalizes case and all whitespace in issue identity and treats a previously evaluated dimension that disappears in a revision as a regression.
 
 ## Current model/runtime policy
 - Default Primary: `gemini / gemini-3.7-flash`.
@@ -112,35 +113,41 @@ User -> Task Contract -> Mode/Profile -> Model Router -> Primary
 - Issue identity is preserved across severity changes; severity downgrades and escalations are explicitly assessed rather than being misclassified as issue removal/introduction.
 - Adversarial tests cover severity changes, severity escalation despite a higher overall score, dimension tradeoffs where a core dimension regresses, repeated revisions using the immediate previous baseline, and preservation of the stronger prior candidate after a regression.
 - Policy-contract and stabilization tests validate profile structure, evidence requirements, verifier budgets, malformed evaluator outputs, stopping behavior, hard gates, and best-version invariants.
+- The foundation guardrail suite now covers intent authority, missing-context ASK behavior, unknown evaluation, evidence/hard-gate precedence, full revision lifecycle, bounded budgets, best-version preservation, provider-agnostic roles, and explicit model selection.
 
 ## Phase E — Development trace exposure (implemented baseline)
 - Added `POST /v1/engine/trace` as an additive development interface.
 - The normal `/v1/engine` contract is unchanged.
 - Trace responses serialize only `TraceEvent` timestamp/stage/status/details metadata and preserve the existing payload-safety boundary.
 - Service compatibility is covered for concrete and lightweight/injected engine implementations.
-- Future work can add authenticated/protected development access or richer status views without coupling the core engine to UI concerns.
+- Stronger trace access control is implemented: loopback remains available for local development when no token is configured; non-loopback trace access is denied without a token; configured `REVISE_TRACE_TOKEN` requires a matching `X-Revise-Trace-Token` header.
 
-## Foundation stabilization — current phase
-- Policy objects fail closed when structurally invalid.
-- Hard-gate policy is enforced by the decision layer rather than being decorative configuration.
-- Missing configured deterministic/external verifiers fail closed rather than disappearing from the evaluation path.
-- Verification budgets now have runtime semantics.
-- Evidence requirements now affect acceptance.
-- Evaluator result validation now fails closed.
-- `stop_on_no_improvement` and best-version invariants are implemented.
-- Stabilization regression fixes are now present on the working branch; local execution remains the final confirmation point before merging to `main`.
+## Foundation stabilization — current direction
+- The core architecture is now treated as a protected contract rather than an area for continuous abstraction expansion.
+- `core/foundation_invariants.md` records the durable invariants that the engine must continuously prove.
+- `core/engine_release_readiness.md` defines the release gates and presentable engine candidate criteria.
+- `engine/test_foundation_invariants.py` is the dedicated guardrail suite and should run alongside the complete engine suite before release/merge decisions.
+- The immediate objective is a trustworthy, presentable engine candidate: prove the existing lifecycle and invariants first, then expand only in response to measured gaps.
+- `ASK` remains a first-class successful terminal outcome when reliable completion is blocked.
 
 ## Roadmap after stabilization
+### Release candidate
+1. Run the dedicated foundation invariant suite.
+2. Run the complete engine suite on the current main-derived branch.
+3. Exercise successful and pathological end-to-end lifecycle scenarios.
+4. Verify provider/model role independence and explicit selection.
+5. Verify stable `/v1/engine` behavior and development-only trace boundaries.
+6. Merge only after the combined branch is green.
+
 ### Phase C follow-up
 - Add genuine sandboxed code execution/tests only when secure bounded infrastructure is available.
 - Add richer external evidence adapters that can verify structured source metadata or task-specific facts without conflating reachability with claim truth.
 
 ### Phase D follow-up
-- Continue adversarial/corner-case testing around multi-issue interactions, missing dimensions, score ties, and mixed improvements/regressions.
+- Continue adversarial/corner-case testing around multi-issue interactions, evidence conflicts, malformed evidence, and other gaps discovered by scenario testing.
 
 ### Phase E follow-up
-- Add stronger access control if the development trace endpoint is ever exposed beyond a trusted local/development environment.
-- Consider bounded run/status metadata if the UI needs progress/state without exposing model payloads or internal prompts.
+- Add bounded run/status metadata only if real product needs demonstrate that it is necessary; do not couple the core engine to UI internals.
 
 ## Working procedure
 1. Read this file first.

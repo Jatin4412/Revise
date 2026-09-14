@@ -2,7 +2,7 @@
 
 > **Purpose:** Working document for our discussion and final implementation handoff to the Foundation Agent. This is where Revise-specific analysis, observations, decisions, proposed changes, architecture, tests, and implementation instructions belong.
 >
-> **Research separation rule:** `core/foundation_alignment_research.md` is research-only. Do not place project analysis or implementation decisions there. Add the external reasoning/model research there when supplied; interpret and discuss it in this document.
+> **Research separation rule:** `core/foundation_alignment_research.md` is research-only. Do not place project analysis or implementation decisions there. The external research artifact remains untouched as research; interpret and discuss it here.
 
 ---
 
@@ -10,477 +10,903 @@
 
 Bring the Revise engine foundation closer to the intended product behavior while preserving the established foundation invariants and avoiding unnecessary architectural complexity.
 
-### Product goal clarified during discussion
-
-The original reason for starting Revise remains the primary north star:
+### Product goal — primary north star
 
 > **Build a self-correcting AI agent.**
 
-This does **not** mean the core must become a large general-purpose agent framework immediately. It means the engine must reliably be able to:
+Revise should reliably be able to:
 
 ```text
-Generate -> Evaluate -> Detect problems -> Correct -> Re-evaluate ->
-Accept the improved result OR Ask when reliable completion is blocked
+Generate -> Evaluate -> Diagnose -> Correct -> Re-evaluate
+         -> Accept improved result
+         OR continue bounded correction
+         OR ASK when reliable completion is blocked
 ```
 
-The architecture should therefore be **flexible without becoming unstable or confusing**. New capabilities such as search, multiple candidates, tools, stronger reasoning models, or richer agent loops should be possible later through well-defined extensions rather than by repeatedly restructuring the foundation.
+The architecture should be **flexible without becoming unstable or confusing**. New reasoning mechanisms should be additive capabilities around a protected self-correction core, not repeated rewrites of the foundation.
 
 Current focus:
 
-1. Make Lite / Basic / Pro / Auto meaningfully control available effort without reducing this to crude response-length limits.
-2. Make Revise recognize when answer-critical context is missing and ask targeted clarification questions before producing an unreliable or unnecessarily generic answer.
-3. Keep answers proportional to the task: more words are not inherently better.
+1. Make Lite / Basic / Pro / Auto meaningfully control available effort without reducing Power to crude response-length limits.
+2. Make Revise recognize when answer-critical context is missing and ask targeted clarification questions rather than produce unreliable generic answers.
+3. Keep answers proportional to the task: more words or more thinking are not inherently better.
 4. Preserve provider-agnostic Primary / Secondary / Verifier roles, bounded execution, deterministic precedence, revision-quality rules, best-version preservation, fail-closed behavior, and the stable API.
-5. Preserve a clean path toward future candidate search, tool use, richer orchestration, and agentic execution without making those capabilities mandatory in the first implementation.
+5. Preserve clean extension paths toward candidate search, tools, retrieval, richer orchestration, memory, and agentic execution.
+6. Build the self-correction capability first; add broader reasoning capabilities only when they solve a measured limitation.
 
 ---
 
-## 2. Current Runtime Observations
+## 2. Current Runtime / Foundation State
 
-### Basic response depth
+### Existing foundation
 
-Observed 2026-09-14 runtime traces:
+The engine already has:
+
+- task contracts and execution state
+- Lite / Basic / Pro / Auto modes
+- adaptive evaluation profiles
+- provider-neutral Primary / Secondary / Verifier roles
+- weighted multidimensional evaluation
+- deterministic arithmetic, Python syntax/compile-only, JSON, and JSON-schema verification
+- bounded external source reachability verification
+- evidence fusion and deterministic/external precedence
+- hard gates and fail-closed behavior
+- bounded revision budgets and verification budgets
+- revision-quality comparison against the immediately previous evaluated version
+- stable issue identity and severity-change tracking
+- best-valid-version preservation
+- `ASK` as a first-class terminal decision
+- safe development trace exposure
+- stable `/v1/engine` response contract
+
+### Important recent boundary fix
+
+A rejected candidate must never become the user-facing answer merely because it is the only version in state. Terminal `ASK` now has an explicit output boundary: no rejected candidate is exposed as the final response/version.
+
+### Runtime observations
+
+Recent Basic/OpenRouter runtime traces showed very long answers while the profile was only medium effort. This indicates that the current mode/profile affects evaluation/revision/verification policy more strongly than initial generation policy.
+
+An under-specified question equivalent to `I got hit by a ball, what should I do?` also produced a long generic answer rather than first identifying the small set of missing facts that materially affect the response. This exposes a context-sufficiency gap rather than simply a model-quality problem.
+
+---
+
+## 3. Protected Foundation Principles
+
+These remain stable:
+
+1. User intent and explicit mode are authoritative.
+2. Auto chooses effort/verification, not intent.
+3. Evaluation is multidimensional and task-specific.
+4. Deterministic/external evidence beats model opinion when available.
+5. Secondary returns reasons, issues, confidence, and revision guidance.
+6. Unknown/low-confidence evaluation is not a pass.
+7. Revisions must demonstrate improvement; regressions can revert to the best valid version.
+8. Do not ask Secondary to judge things that can be directly verified.
+9. Hard gates apply to safety/security/critical constraints; soft scores apply to quality/style dimensions.
+10. Missing information should lead to asking rather than inventing.
+11. The strongest appropriate configured model belongs in Primary unless explicitly overridden.
+12. More words do not mean better output.
+13. Budgets must be bounded and observable.
+14. Structured evaluation/evidence failures fail closed.
+15. Provider/model identities are configuration; Primary/Secondary/Verifier are roles.
+16. `ASK` is a valid successful terminal outcome when reliable completion is blocked.
+17. Stable API boundaries must not be expanded merely to expose internal reasoning.
+18. Future extensions must consume core contracts, evidence, budgets, and decisions rather than bypass them.
+
+Additional architectural protection:
+
+> **Self-correction is the protected core behavior. General agent orchestration is an extension layer, not a reason to destabilize the core.**
+
+---
+
+## 4. Research Integration — What the External Research Establishes
+
+The supplied `Executive Summary.pdf` surveys reasoning mechanisms from direct generation through hidden reasoning, extended/test-time compute, deliberation, search, tools, agents, multi-agent systems, verifiers, planning/tree search, and RL-trained reasoning. It describes a broad industry shift from one-pass generation toward **systems that deliberately spend additional computation and structured interaction when the task warrants it**. fileciteturn841file0L12-L34
+
+The report's taxonomy distinguishes model-internal mechanisms, search/ensemble mechanisms, tool-assisted reasoning, agentic loops, and planning/search integration. It explicitly notes that these categories overlap in real systems. fileciteturn841file0L53-L90 fileciteturn841file0L103-L124
+
+### 4.1 Direct generation is still a legitimate baseline
+
+The research does **not** imply that every request should be treated as a reasoning problem. Direct generation remains appropriate for simple questions, casual interaction, creative tasks, and throughput-sensitive workloads. Extra reasoning can be wasteful and can sometimes hurt easy/out-of-distribution tasks through overthinking. fileciteturn841file0L55-L62 fileciteturn841file0L488-L502
+
+**Revise implication:** The self-correction engine must be selective. A strong engine does not maximize computation; it spends enough effort to meet the task's requirements.
+
+### 4.2 Test-time compute is a real architectural resource
+
+The research describes longer reasoning, multiple trials, reranking/verification, and adaptive allocation as forms of inference-time computation. More compute can improve hard-task performance, but gains are generally diminishing and task-dependent. fileciteturn841file0L451-L502
+
+**Revise implication:** Power should be an abstract resource envelope rather than a synonym for response length or a single vendor reasoning parameter.
+
+### 4.3 Search and multiple candidates are valid future mechanisms
+
+Self-consistency, best-of-N, sampling, reranking, and tree-search approaches all treat alternative solution paths as a way to increase the probability of finding a good result. The research also notes that explicit tree search remains much less common in production than simpler sampling/reranking patterns. fileciteturn841file0L216-L235
+
+**Revise implication:** Candidate search should remain an optional future computation strategy. It should not be mandatory for ordinary requests.
+
+### 4.4 Verification is a separate and important capability
+
+The research repeatedly separates generation from verification/reranking and describes generator + verifier architectures as a production pattern. It also warns that correlated errors can occur when generator and verifier are the same model. fileciteturn841file0L109-L120 fileciteturn841file0L230-L235 fileciteturn841file0L836-L846
+
+**Revise implication:** The current independent Secondary and deterministic verification architecture is directionally correct. Future verification should become stronger where independent evidence is available rather than simply asking the same model to be more confident.
+
+### 4.5 Tool-assisted reasoning extends capability outside the model
+
+Retrieval, code execution, calculators, APIs, and other tools can externalize computation or knowledge. The research describes model → tool → model and model → planner → tools → verifier → final model patterns. fileciteturn841file0L86-L90 fileciteturn841file0L647-L656
+
+**Revise implication:** Tools are a future extension surface. The engine should be able to allocate bounded tool effort later without making tools part of today's protected core.
+
+### 4.6 Agentic loops add planning, action, observation, and replanning
+
+The research defines agentic reasoning as a repeated Reason → Act → Observe → Reason loop and describes planner/executor/critic and multi-agent architectures. Agents add capabilities such as planning, tool selection, error recovery, and goal management, but they also introduce loops, latency, security, attribution, and orchestration complexity. fileciteturn841file0L91-L116 fileciteturn841file0L608-L636
+
+**Revise implication:** Revise can be agentic in behavior without becoming a general agent framework. Its first agentic capability is self-correction; autonomous action/tool orchestration can sit above it later.
+
+### 4.7 Model-level reasoning and system-level reasoning are different
+
+The research distinguishes learned/model-internal reasoning from system-level reasoning built through routing, multiple calls, tools, search, memory, and orchestration. Modern systems commonly combine both. fileciteturn841file0L424-L450
+
+**Revise implication:** Do not design Revise as though reasoning must live inside one model. The engine itself can become a reasoning system while keeping provider/model implementations replaceable.
+
+### 4.8 Stronger models and more inference compute are complementary
+
+The research finds a tradeoff between model capability and inference-time search/compute: additional inference can compensate for some model weakness, but there are limits when the underlying model lacks necessary knowledge or capability. fileciteturn841file0L570-L607
+
+**Revise implication:** Power cannot mean simply “use a stronger model.” Model routing and effort allocation should remain separate policy dimensions that can cooperate.
+
+### 4.9 RL-trained reasoning is useful but not a replacement for system verification
+
+The research describes RL-trained reasoners as learning stronger decomposition, persistence, verification, and problem-solving behaviors, while also noting that outcome rewards do not guarantee faithful reasoning and that RL has limitations and risks. fileciteturn841file0L512-L569
+
+**Revise implication:** Revise should not depend on a provider having a reasoning-trained model. The system-level self-correction layer remains valuable across model families.
+
+### 4.10 Hidden reasoning should not become a Revise user-facing contract
+
+The research describes hidden/internal reasoning, visible CoT, and the important distinction between internal computation and a human-readable explanation. It notes that visible CoT is not guaranteed to faithfully represent the actual internal process. fileciteturn841file0L884-L919
+
+**Revise implication:** Revise should not expose or depend on raw provider chain-of-thought. Diagnostics should be structured, bounded, and purpose-built for correction/verification rather than treating hidden reasoning as an API contract.
+
+### 4.11 Adaptive reasoning is the strongest fit for Power
+
+The research describes explicit reasoning controls, automatic difficulty-aware allocation, model escalation, and bounded agent loops. It emphasizes that heavy reasoning should not be spent on every task. fileciteturn842file0L104-L131
+
+**Revise implication:** Power should eventually govern an adaptive resource envelope. The engine should spend effort where the task needs it and stop when further work is not justified.
+
+### 4.12 Hybrid orchestration is the long-term direction, but not the first rebuild
+
+The research's hybrid architecture is essentially:
 
 ```text
-mode=basic
-profile effort=medium max_revisions=1 max_verification_steps=2
-OpenRouter Free response_length=2946
-...
-DECISION ACCEPT score=1.0
+User Query
+   -> Router / Policy
+   -> Model + reasoning budget
+   -> optional tools/search/planning
+   -> verifier/critic
+   -> final result
 ```
 
-Another Basic request:
+It describes this as a broader trend in which reasoning becomes a property of the system rather than only the LLM. fileciteturn842file0L132-L159
+
+**Revise implication:** This supports our layered architecture, but does not justify implementing every layer now.
+
+### 4.13 Economics reinforce bounded adaptive effort
+
+The research emphasizes inference cost, latency, diminishing returns, and the importance of cost per successful task rather than cost per token alone. It recommends hybrid allocation: cheap paths for easy tasks and expensive reasoning for difficult/high-value tasks. fileciteturn842file0L69-L103
+
+**Revise implication:** A future Power controller should optimize useful work, not blindly maximize compute. The metric to care about is closer to **successful task completion per unit of effort/cost/latency**.
+
+### 4.14 Distillation is a future efficiency path
+
+The research describes teacher/student and RL distillation as ways to transfer reasoning behavior into smaller models, with DeepSeek cited as evidence that smaller models can acquire nontrivial reasoning patterns. It also notes overfitting and generalization caveats. fileciteturn842file0L36-L68
+
+**Revise implication:** The architecture should remain model-agnostic so future cheaper specialized reasoners can replace expensive models without changing the self-correction foundation.
+
+### 4.15 Major failure modes must shape the foundation
+
+The research identifies latency/cost, diminishing returns, overthinking, correlated verifier errors, overconfidence, orchestration complexity, reward hacking, security/prompt injection, context exhaustion, inconsistency, and brittleness. fileciteturn841file0L810-L869
+
+**Revise implication:** More reasoning is not inherently safer or better. Every future expansion needs bounded budgets, independent evidence where possible, stopping conditions, security boundaries, and regression protection.
+
+---
+
+## 5. Revise's Core Self-Correction Model
+
+The discussion now favors one compact core rather than five separate correction systems.
+
+### Core loop
 
 ```text
-OpenRouter Free response_length=4462
-...
-DECISION ACCEPT score=1.0
+Attempt
+  -> Evaluate
+  -> Diagnose
+  -> Correct
+  -> Re-evaluate
+  -> Decide
 ```
 
-The selected effort currently affects the evaluation/revision/verification profile, but the current Primary generation prompt does not receive a corresponding explicit generation-effort/depth policy.
+Where **Correct** is intentionally extensible.
 
-### Under-specified injury question
+Today it can mean rewriting a weak answer or fixing an identified mistake. Later it can mean changing the reasoning approach, gathering evidence, generating another candidate, switching models, invoking a tool, or changing execution strategy.
 
-Observed product behavior for a question equivalent to:
+### Correction capability levels
 
-> "I got hit by a ball, what should I do?"
+These are not five separate engines. They are increasingly capable uses of the same correction abstraction:
 
-was a very long generic injury response rather than first determining the few missing facts that materially affect appropriate guidance.
+1. **Error correction** — fix an obvious factual, logical, formatting, or instruction error.
+2. **Quality correction** — improve a weak but not strictly incorrect answer.
+3. **Evidence correction** — obtain or validate evidence when the answer is insufficiently grounded.
+4. **Reasoning correction** — recognize that the current reasoning approach is flawed and try a materially different approach.
+5. **Strategy correction** — change the overall method/model/tool/search strategy when the current approach is failing.
 
-This is not necessarily a model-quality failure. It exposes a foundation gap: the engine has an ASK outcome and a `missing_context` field, but does not yet have a robust general mechanism for deciding that answer-critical context is missing.
+The important architectural distinction is:
+
+> **Revise must eventually be able to change the approach, not merely rewrite the output.**
+
+A loop that only rewrites the same failed approach can produce:
+
+```text
+bad answer -> rewrite -> similar bad answer -> rewrite -> ...
+```
+
+A stronger self-correcting system can produce:
+
+```text
+failed approach
+   -> diagnose approach failure
+   -> select different strategy
+   -> new attempt
+   -> verify improvement
+```
+
+### Minimum viable core
+
+For the first stable self-correction implementation, the core does not need hidden CoT, tree search, multi-agent debate, or tools. It needs:
+
+- a candidate attempt
+- structured evaluation
+- actionable diagnosis
+- a bounded correction action
+- re-evaluation
+- explicit improvement assessment
+- safe stopping
+- best-valid-version preservation
+- ASK when reliable correction is blocked
+
+That is enough to make the identity of Revise real without prematurely implementing every modern reasoning mechanism.
 
 ---
 
-## 3. Existing Foundation We Must Preserve
+## 6. Diagnosis — The Bridge to Human-Like Adaptive Reasoning
 
-The protected foundation already establishes:
+The next major design problem is not “how do we make the model think longer?” It is:
 
-- intent is authoritative
-- Auto cannot rewrite intent
-- multidimensional task-specific evaluation
-- deterministic/external evidence precedence
-- unknown/low-confidence does not pass
-- revisions must improve
-- best valid version is preserved
-- budgets are bounded
-- malformed structured evaluation/evidence fails closed
-- roles are provider-agnostic
-- ASK is a valid terminal outcome
-- verification claims remain bounded
-- stable `/v1/engine` API remains small
+> **How does Revise determine why the current attempt is inadequate and what kind of correction is justified?**
 
-No proposed change should weaken these invariants.
+A useful future diagnosis structure should be able to represent:
 
-The new architectural direction adds one more protection:
+```text
+Diagnosis
+├── outcome: pass / fail / unknown / partial
+├── affected dimensions
+├── issue identities
+├── severity
+├── confidence
+├── evidence conflicts
+├── missing context
+├── failure class
+├── suggested correction
+├── whether current strategy is still viable
+└── escalation recommendation
+```
 
-> **Self-correction is the core behavior; general agent orchestration is an extensible capability around that core, not a reason to destabilize the core.**
+Potential failure classes:
+
+- `task_mismatch`
+- `instruction_violation`
+- `factual_error`
+- `reasoning_error`
+- `missing_context`
+- `missing_evidence`
+- `verification_failure`
+- `format/schema_error`
+- `style/proportionality_issue`
+- `strategy_failure`
+- `provider/model_failure`
+- `tool_failure` (future)
+- `search_failure` (future)
+
+These should remain conceptual until the contract is finalized. Avoid adding a large taxonomy merely for completeness.
+
+### Why diagnosis matters
+
+Diagnosis lets the controller distinguish:
+
+```text
+Needs a better answer
+vs
+Needs more evidence
+vs
+Needs another reasoning attempt
+vs
+Needs a different strategy
+vs
+Cannot safely complete -> ASK
+```
+
+That distinction is the foundation of adaptive self-correction.
 
 ---
 
-## 4. Working Hypotheses — To Be Challenged by Research
+## 7. Power — Current Architectural Direction
 
-These are hypotheses and discussion decisions, not yet an implementation specification.
+Power is **not**:
 
-### 4.1 Revise identity / scope
+- response verbosity
+- user intent
+- a vendor-specific reasoning parameter
+- “always use the strongest model”
+- “always think longer”
 
-**Discussion conclusion:** Revise should optimize first for the self-correcting-agent goal, while keeping the underlying engine modular enough to grow.
+Power is:
 
-We should distinguish two meanings of "agent":
+> **A bounded policy for how much useful computational/verification/orchestration effort Revise may spend on the task.**
 
-1. **Self-correcting agent behavior — core Revise responsibility.**
-   - generate a candidate
-   - evaluate it
-   - verify where possible
-   - identify deficiencies
-   - revise
-   - stop when good enough or ask when reliable completion is blocked
+### Future resource envelope
 
-2. **Broad autonomous agent orchestration — future extension.**
-   - tool selection
-   - web/browser interaction
-   - long-horizon action loops
-   - external environments
-   - multi-agent delegation
-   - persistent memory
+```text
+Power
+  ├── generation effort
+  ├── revision budget
+  ├── verification budget
+  ├── candidate budget
+  ├── search/tool budget
+  ├── model escalation budget
+  ├── parallelism budget
+  └── stopping policy
+```
 
-The second category should not be forced into the foundation merely because modern AI products use it. The architecture should leave clean extension points for it.
+Not every resource needs to exist in version 1. The abstraction should simply avoid preventing them later.
 
-### 4.2 Power
+### Mode intent
 
-Power should mean **available effort / depth / resources**, not "maximum response length."
-
-**Current decision:** The exact mechanism remains intentionally undecided until the discussion is complete. We should not prematurely equate Power with a single provider parameter or a token cap.
-
-Potential conceptual model:
-
-| Mode | Intended behavior |
+| Mode | Core intent |
 |---|---|
-| Lite | fast, concise, minimal necessary effort |
-| Basic | balanced effort and depth |
-| Pro | deeper effort when task complexity warrants it |
-| Auto | dynamically select appropriate effort/resources |
+| Lite | fast path, minimal necessary effort |
+| Basic | balanced effort and reliability |
+| Pro | deeper effort when justified by task complexity/reliability |
+| Auto | dynamically allocate appropriate effort/resources |
 
-Potential resources Power may eventually govern:
+**Important:** Lite should not intentionally mean low-quality. Pro should not intentionally mean verbose. Auto must not override explicit user intent.
 
-- model capability/tier selection where policy allows
-- hidden/provider-native reasoning effort where supported
-- number of candidate attempts
-- verification budget
-- revision budget
-- tool/search budget when those capabilities exist
-- stopping/early-completion policy
+### Power and task difficulty
 
-The important architectural rule is:
+The research strongly supports adaptive allocation. Therefore, future Power should not simply map `Lite=1, Basic=2, Pro=3` and blindly consume the maximum. The controller should be able to stop early when the task is already satisfactorily solved.
+
+Conceptually:
 
 ```text
-Power = bounded computation/resource policy
-Power != answer verbosity
-Power != user intent
+allowed budget = mode/power policy
+actual spend   = task difficulty + diagnosis + evidence need + stopping rules
 ```
 
-Provider-specific controls should be adapters underneath this policy, never the foundation definition of Power.
-
-### 4.3 Context sufficiency
-
-The likely desired lifecycle is:
-
-```text
-User
-  -> Task Contract
-  -> Context Sufficiency
-       |-- insufficient -> ASK targeted clarification
-       |
-       `-- sufficient
-             -> Profile / Power
-             -> Primary
-             -> Evaluation + Verification
-             -> Revision / Decision
-```
-
-The key question is whether context sufficiency should be an explicit pre-generation gate, part of contract construction, or another carefully bounded foundation component.
-
-The mechanism must not become a brittle set of keyword rules.
-
-### 4.4 Minimal clarification
-
-The desired behavior is not "ask lots of questions."
-
-It should identify the smallest set of missing facts whose absence materially affects reliable task completion.
-
-For example, the ball-injury scenario may require location and symptoms, but not irrelevant details such as ball color or brand.
-
-### 4.5 Candidate search / multiple solutions
-
-**Discussion direction:** Keep the architecture open to candidate generation and reranking/verification, but do not make best-of-N a mandatory first implementation.
-
-The likely future evolution is:
-
-```text
-Primary -> candidate(s) -> evaluation/verification -> select/revise
-```
-
-rather than assuming every request must generate many candidates.
-
-This should be treated as an additional bounded computation strategy that Power may eventually allocate when justified by task difficulty or reliability requirements.
-
-### 4.6 Agentic orchestration
-
-**Discussion conclusion:** Do **not** turn the current foundation into a general agent framework yet.
-
-Instead, preserve a layered direction:
-
-```text
-                    Future extensions
-       tools / search / memory / multi-agent / actions
-                              |
-                              v
-                    orchestration layer
-                              |
-                              v
-        -----------------------------------------------
-        Revise self-correction engine (protected core)
-        -----------------------------------------------
-        Contract -> Profile -> Primary -> Evaluate/Verify
-                   -> Revise -> Decide -> Best/ASK
-```
-
-This gives Revise a strong identity now while avoiding a future dead end. If agentic capabilities are added, they should consume the core's contracts, budgets, evidence, decisions, and safety boundaries rather than bypassing them.
+This gives us a stable meaning for Power even as future mechanisms are added.
 
 ---
 
-## 5. Research Integration Plan
+## 8. Context Sufficiency and Clarification
 
-When the external reasoning/model research report is added to `core/foundation_alignment_research.md`:
-
-1. Read it as the research source, preserving its claims and terminology.
-2. Extract findings relevant to Revise's Power/effort model, adaptive compute, orchestration, verification, clarification, ambiguity handling, and agentic behavior.
-3. Separate documented facts from inference and speculation.
-4. Verify important current-production claims against primary/current sources when needed.
-5. Compare the research findings against the current Revise implementation.
-6. Record conclusions here, not in the research file.
-7. Challenge our initial hypotheses where the evidence disagrees.
-8. Decide the smallest foundation changes justified by the evidence.
-9. Draft the final Foundation Agent implementation response only after the design is settled.
-
----
-
-## 6. Discussion / Evidence Notes
-
-### Finding A — Power currently under-specifies generation behavior
-
-**Status:** Confirmed from current Revise implementation/runtime.
-
-The profile selects an effort value, but generation currently does not receive a generation policy derived from that effort. The existing distinction is therefore weighted toward evaluation/revision/verification rather than initial generation behavior.
-
-**Research relevance:** The supplied research describes production systems increasingly treating inference compute as a controllable resource, including explicit effort/depth controls and adaptive allocation. This supports the direction of a provider-neutral effort policy, but does **not** by itself determine Revise's exact implementation.
-
-### Finding B — `missing_context -> ASK` already exists
-
-**Status:** Confirmed.
-
-The foundation already treats missing context as an ASK condition. The missing piece is context discovery / sufficiency assessment.
-
-**Research relevance:** The supplied research emphasizes adaptive orchestration and choosing the simplest sufficient path, but it does not provide a sufficiently specific general algorithm for Revise's context-sufficiency problem. This remains an architectural design problem we need to solve deliberately rather than copy a vendor pattern.
-
-### Finding C — ASK must remain a first-class product outcome
-
-**Status:** Confirmed foundation principle and recently strengthened at the output boundary.
-
-Rejected candidates must not leak through as user-facing answers when the terminal decision is ASK.
-
-**Research relevance:** The research's broader reliability discussion supports bounded verification and escalation, but the exact ASK semantics remain a Revise foundation decision.
-
-### Finding D — Self-correction should remain the core before broad agentification
-
-**Status:** Discussion conclusion.
-
-The research shows that production systems increasingly combine reasoning models with tools, search, routing, and agent loops. However, that does not mean Revise should absorb all of those concerns into its core immediately.
-
-The stronger foundation is to make self-correction a stable primitive that future orchestration can call. This keeps the core comprehensible and makes later tools/agents additive instead of foundational rewrites.
-
-### Finding E — Power should likely govern a resource envelope, not one mechanism
-
-**Status:** Working architectural direction; exact policy not finalized.
-
-The research identifies several forms of inference-time compute: longer reasoning, multiple candidates, reranking/verification, tool calls, and agent loops. This suggests that defining Power as merely "reasoning tokens" would be too narrow for Revise's long-term direction.
-
-The current working abstraction is therefore:
+Current gap:
 
 ```text
-Power -> allowed effort/resource envelope
-       -> provider/model-specific mechanisms
+missing_context -> ASK
 ```
 
-The envelope must remain bounded, observable, and policy-driven.
+exists, but discovering missing context is underdeveloped.
+
+### Desired behavior
+
+Before committing to an answer path, Revise should determine whether the available context is sufficient for reliable completion.
+
+```text
+Task Contract
+   -> Context Sufficiency
+      |-- sufficient -> proceed
+      `-- insufficient -> targeted ASK
+```
+
+The goal is **minimal necessary clarification**, not maximum information gathering.
+
+### Important distinction
+
+The engine must distinguish:
+
+```text
+missing information that the user must provide
+vs
+uncertainty that Revise can resolve itself
+```
+
+Examples:
+
+- Missing user-specific constraint → ask.
+- Arithmetic uncertainty → verify deterministically.
+- Missing factual source that can be retrieved later → future tool/search path.
+- Weak reasoning → revise/try another strategy.
+- Impossible to proceed reliably without a required fact → ask.
+
+### Clarification should be bounded
+
+Avoid:
+
+```text
+ASK -> answer -> ASK -> answer -> ...
+```
+
+The future clarification state should track what has already been asked and answered and prevent redundant questions.
+
+Potential state:
+
+```text
+known_context
+missing_context
+questions_asked
+answers_received
+remaining_required_context
+clarification_attempts
+```
+
+Whether this belongs directly in `TaskContract` or adjacent execution state remains to be decided.
+
+### Do not over-question
+
+The context assessor must not become a keyword-rule engine or a generic “ask before answering” system. Simple tasks should continue directly. Complex tasks should ask only when the missing information materially affects correctness, safety, or task completion.
 
 ---
 
-## 7. Scenario Matrix
+## 9. Candidate Search and Alternative Solutions — Future Capability
 
-| Scenario | Desired behavior | Main foundation question |
+The research supports multiple candidate generation, self-consistency, reranking, and verification as useful forms of test-time search. fileciteturn841file0L82-L85
+
+Revise should eventually support an optional abstraction such as:
+
+```text
+Task
+ -> candidate generation
+ -> candidate evaluation / verification
+ -> select strongest candidate
+ -> revise if none is adequate
+```
+
+But this should remain optional.
+
+### Why not implement it immediately?
+
+- cost multiplies rapidly
+- correlated errors remain possible
+- ordinary tasks do not need N candidates
+- the current single-candidate self-correction loop is not yet fully characterized
+- search should be introduced only where it measurably improves outcomes
+
+### Future search strategies
+
+Potential implementations include:
+
+- independent sampling
+- best-of-N
+- self-consistency voting
+- reranking
+- alternative reasoning strategies
+- beam/tree search where justified
+- parallel specialist attempts
+
+These are **strategies**, not separate foundation identities.
+
+---
+
+## 10. Tools, Retrieval, Memory, and Agents — Future Extension Architecture
+
+The research indicates that strong production systems increasingly combine models with tools, retrieval, memory, routers, and agent loops. fileciteturn842file0L132-L159
+
+Revise should therefore preserve this layered architecture:
+
+```text
+                 FUTURE EXTENSIONS
+     tools / search / retrieval / memory / actions
+                    / multi-agent
+                           |
+                           v
+                  ORCHESTRATION LAYER
+                           |
+                           v
+        -----------------------------------------
+          REVISE SELF-CORRECTION CORE
+        -----------------------------------------
+        Contract -> Profile -> Primary
+             -> Evaluate / Verify
+             -> Diagnose -> Correct
+             -> Re-evaluate -> Decide
+             -> Best valid / ASK
+```
+
+### Extension rule
+
+Future capabilities must consume and respect:
+
+- Task Contract
+- explicit user intent
+- Power/resource budgets
+- evidence contracts
+- safety/hard gates
+- revision-quality rules
+- stopping conditions
+- best-version rules
+- ASK boundary
+- observability/security boundaries
+
+They must not create a parallel “agent brain” that bypasses the foundation.
+
+### Agent identity decision
+
+Revise **is allowed to be an agent in behavior** because it can observe its own evaluation, correct itself, and continue toward a goal.
+
+Revise does **not** need to become a general agent framework containing every possible tool, workflow, memory, and multi-agent primitive.
+
+This distinction preserves both the original goal and architectural clarity.
+
+---
+
+## 11. Research-Derived Architecture Patterns Worth Preserving
+
+The research describes recurring production patterns:
+
+- single model → answer
+- reasoning model → answer
+- model → tool → model
+- planner → tools → verifier → final model
+- multiple candidates → reranker
+- planner + executor + critic
+- multiple specialized agents
+- reasoning model + external search
+- reasoning model + browser/code/memory
+- dynamic orchestration based on task difficulty
+
+fileciteturn841file0L639-L695
+
+Revise should not implement all patterns as separate modes. Instead, they should map onto a small number of future capabilities:
+
+```text
+Generation
+Evaluation
+Diagnosis
+Correction
+Verification
+Candidate/Search
+Tool/Environment
+Orchestration
+```
+
+This is the preferred anti-redundancy principle.
+
+---
+
+## 12. Production Lessons Relevant to Revise
+
+### 12.1 Explicit effort controls exist in modern products
+
+The research reports provider controls such as OpenAI reasoning effort and Google's thinking level, plus adaptive compute behavior. fileciteturn841file0L925-L990
+
+**Lesson:** Revise should have provider-neutral effort semantics and let adapters translate them to provider-specific controls where available.
+
+### 12.2 Strong model + orchestration is more powerful than either alone
+
+The research repeatedly describes hybrid systems combining model capability with routing, search, tools, and verification. fileciteturn841file0L441-L450
+
+**Lesson:** Do not make the engine dependent on a “reasoning model” being available. The system should improve even ordinary models through evaluation and correction.
+
+### 12.3 More compute has diminishing returns
+
+The research reports logarithmic/sublinear gains and overthinking risks. fileciteturn841file0L484-L490
+
+**Lesson:** stopping conditions are a first-class part of future Power, not an afterthought.
+
+### 12.4 Verifier independence matters
+
+The research warns about correlated errors when generator and verifier share weaknesses. fileciteturn841file0L836-L842
+
+**Lesson:** deterministic verification should remain preferred when possible, and future independent verifiers should be supported.
+
+### 12.5 Agent loops need explicit bounds
+
+The research notes loops, tool failures, context exhaustion, security vulnerabilities, and orchestration complexity. fileciteturn841file0L843-L869
+
+**Lesson:** every future action/search/tool loop needs hard resource and step limits plus safe termination.
+
+### 12.6 Reasoning traces are not reliable explanations
+
+The research explicitly warns that visible CoT may not reflect the actual causal process. fileciteturn841file0L894-L919
+
+**Lesson:** Revise should expose structured outcome/diagnostic metadata to development tooling rather than raw hidden reasoning.
+
+---
+
+## 13. Feature Roadmap — Discussed / Intended, Not All Immediate
+
+### Foundation / near-term
+
+1. **Minimum viable self-correction loop**
+   - candidate
+   - evaluation
+   - diagnosis
+   - correction
+   - re-evaluation
+   - improvement check
+   - bounded stop
+   - ASK boundary
+
+2. **Provider-neutral generation effort policy**
+   - connect mode/profile effort to Primary generation behavior
+   - keep provider-specific mappings in adapters
+   - do not equate effort with verbosity
+
+3. **Context sufficiency / minimal clarification**
+   - identify materially missing information
+   - ask targeted questions
+   - track clarification state
+   - avoid repeated or unnecessary questions
+
+4. **Stronger diagnosis representation**
+   - distinguish answer error from strategy failure
+   - carry confidence, issue identity, affected dimensions, evidence state, and correction guidance
+
+5. **Proportionality evaluation**
+   - judge whether answer depth is appropriate to the task
+   - never reduce this to a word-count rule
+
+### Future reasoning expansion
+
+6. **Adaptive effort allocation**
+   - allocate actual compute based on task difficulty and current outcome
+   - stop early when sufficient
+   - escalate when failure indicates more work is justified
+
+7. **Alternative candidate/search capability**
+   - multiple candidates when justified
+   - reranking/verification
+   - self-consistency/best-of-N
+   - alternative reasoning strategies
+
+8. **Strategy correction**
+   - allow correction to change method, not merely wording
+   - support model/tool/search strategy changes later
+
+9. **Independent/richer verification**
+   - stronger deterministic checks
+   - external evidence
+   - independent model/verifier roles
+   - task-specific verification
+
+### Future orchestration / agent layer
+
+10. **Tool execution**
+11. **Retrieval/search**
+12. **Bounded browser/API/environment interaction**
+13. **Short-term and long-term memory where genuinely required**
+14. **Planner/executor/critic orchestration where justified**
+15. **Parallel specialist execution**
+16. **Multi-agent collaboration/delegation**
+17. **Long-horizon task management**
+
+### Future model-level / efficiency research
+
+18. **Reasoning-model selection/routing**
+19. **Distilled reasoning models**
+20. **Provider-native hidden reasoning controls through adapters**
+21. **Latent/continuous reasoning research where practical**
+22. **More efficient test-time scaling**
+
+These are capabilities to preserve architectural room for, **not commitments to implement immediately**.
+
+---
+
+## 14. Decision Logic for Future Self-Correction
+
+A future controller should conceptually distinguish:
+
+```text
+Evaluation says good
+    -> ACCEPT
+
+Evaluation says weak but correctable
+    -> CORRECT
+
+Evaluation says current strategy is inadequate
+    -> STRATEGY CORRECT / ESCALATE
+
+Evaluation requires evidence/tool unavailable
+    -> ASK or bounded future tool path
+
+Evaluation is unknown / malformed / low-confidence
+    -> do not pass; ASK or bounded correction
+
+Deterministic/external evidence fails
+    -> REVISE if budget remains, otherwise ASK
+
+Revision does not improve
+    -> stop according to policy / preserve best valid version
+
+No reliable path remains
+    -> ASK
+```
+
+This is a future conceptual controller, not a request to replace the current decision engine immediately.
+
+---
+
+## 15. Scenario Matrix
+
+| Scenario | Desired behavior | Future capability involved |
 |---|---|---|
-| Simple factual question | Answer directly | Avoid unnecessary reasoning/verbosity |
-| Simple arithmetic | Answer + deterministic verification | Keep deterministic precedence |
-| Explicit short-answer request | Respect requested brevity | User instruction outranks adaptive depth |
-| Complex coding/debugging | Deep enough effort + verification | Power should enable more work, not force verbosity |
-| Missing source/document | ASK | Do not invent unavailable context |
-| "I got hit by a ball" | ASK for critical context if needed | Context sufficiency + safety |
-| Fully specified medical question | Answer with safeguards | Do not over-ask |
-| Ambiguous legal/financial question | ASK if material facts/jurisdiction missing | Domain-sensitive sufficiency |
-| Creative writing | Usually answer directly | Avoid needless clarification |
-| Complex planning | Answer or ASK depending on missing constraints | Determine what is actually necessary |
-| Structured JSON task | Generate + schema verification | Preserve deterministic verification |
-| Auto difficult task | Increase effort/resources adaptively | Difficulty-aware allocation |
-| Hard reliability-critical task | Potentially multiple candidates + stronger verification | Future candidate-search policy |
-| Tool-dependent task | Future bounded tool/orchestration path | Keep tools outside protected core initially |
-| Long-horizon autonomous task | Future agent layer over core | Do not destabilize self-correction foundation |
+| Simple factual question | Answer directly | Minimal effort |
+| Simple arithmetic | Answer + deterministic verification | Existing verifier |
+| Explicit short-answer request | Respect brevity | Intent authority + proportionality |
+| Complex coding/debugging | Deeper work + compile/test verification | Power + verification |
+| Missing source/document | ASK rather than invent | Context sufficiency |
+| Under-specified injury question | Ask only critical context | Context sufficiency + safety |
+| Fully specified sensitive question | Answer with safeguards | Evaluation + hard gates |
+| Ambiguous legal/financial task | Ask for material jurisdiction/facts | Context sufficiency |
+| Creative writing | Usually direct | Avoid unnecessary reasoning |
+| Complex planning | Reason, verify constraints, ask only when necessary | Adaptive effort |
+| Structured JSON | Generate + schema verify | Existing deterministic verification |
+| Auto difficult task | Increase actual effort adaptively | Future Power controller |
+| Hard reliability-critical task | Potentially multiple candidates + stronger verification | Future search |
+| Evidence-dependent task | Retrieve/verify evidence when tools exist | Future tools/search |
+| Failed reasoning approach | Try materially different approach | Strategy correction |
+| Long-horizon autonomous task | Future bounded agent loop | Orchestration layer |
 
 ---
 
-## 8. Candidate Foundation Changes — NOT APPROVED YET
+## 16. Candidate Foundation Changes — Prioritized
 
-These remain candidates until research and discussion settle them.
+### Priority A — Core self-correction
 
-### Candidate 1 — Generation effort policy
+Implement the minimum correction abstraction around the existing revision/evaluation foundation without replacing working components unnecessarily.
 
-Introduce a provider-neutral generation policy associated with the selected profile/mode, capable of influencing the Primary without changing user intent.
+### Priority B — Generation effort
 
-Potential dimensions:
+Introduce provider-neutral generation effort semantics so Power affects useful generation effort as well as downstream revision/verification budgets.
 
-- desired reasoning effort
-- response-depth guidance
-- generation budget where provider supports it
-- tool/search budget where applicable in future
-- stopping/early-completion behavior
+### Priority C — Diagnosis
 
-Do not assume all providers expose the same controls.
+Strengthen the information passed from evaluation to correction so the engine can distinguish ordinary revision from strategy change.
 
-### Candidate 2 — Context Sufficiency Gate
+### Priority D — Context sufficiency
 
-Introduce a provider-neutral context-sufficiency assessment before normal generation when the task may require information not supplied by the user.
+Add a bounded, provider-neutral mechanism for detecting answer-critical missing context and generating minimal clarification requests.
 
-Possible output:
+### Priority E — Proportionality
 
-```text
-SUFFICIENT
-or
-INSUFFICIENT + prioritized clarification questions
-```
+Strengthen task-appropriate depth/conciseness evaluation without simplistic length scoring.
 
-It must be bounded and avoid endless clarification loops.
+### Priority F — Future search abstraction
 
-### Candidate 3 — Clarification state
+Reserve a bounded candidate/search interface but do not force best-of-N into ordinary execution.
 
-Determine whether the Task Contract or adjacent state needs a durable representation of:
+### Priority G — Future orchestration boundary
 
-- known context
-- missing context
-- clarification questions already asked
-- user answers to those questions
-- remaining unresolved context
-
-This must integrate with the existing engine contract rather than create an unrelated conversation-state system.
-
-### Candidate 4 — Stronger proportionality evaluation
-
-Investigate whether the evaluator needs a more explicit notion of task-appropriate depth/conciseness so a very long answer cannot receive perfect quality merely because it contains correct information.
-
-This must not turn into a simplistic word-count rule.
-
-### Candidate 5 — Future candidate/search abstraction
-
-Consider a provider-neutral bounded candidate-generation abstraction that can later support best-of-N, sampling, reranking, or alternative solution paths.
-
-This should remain optional and should not force multiple generation passes for ordinary tasks.
-
-### Candidate 6 — Future orchestration boundary
-
-Define an extension boundary for future tools, search, memory, and agentic action loops without implementing those capabilities in the current stabilization/rebuild unless a concrete requirement justifies them.
-
-The extension boundary should consume the existing engine contracts and decision/evidence rules rather than create a parallel control architecture.
+Keep tools/search/memory/agent actions outside the protected core while defining contracts that allow them to integrate later.
 
 ---
 
-## 9. Risks to Investigate
+## 17. Risks / Guardrails
 
-- Extra context-analysis calls could increase latency/cost more than they improve reliability.
-- A context gate could over-question users.
-- A weak context assessor could incorrectly block straightforward tasks.
-- Provider-specific reasoning controls could leak into core policy.
-- Generation-length limits could conflict with legitimate user requirements.
-- Stronger brevity scoring could penalize necessary detailed answers.
-- Adaptive reasoning could become unpredictable if not bounded.
-- Clarification could become an infinite multi-turn loop.
-- Context handling could duplicate evaluation responsibilities.
-- Safety-sensitive clarification must not imply that asking questions guarantees safety.
-- Candidate search can multiply cost quickly and can amplify correlated model errors.
-- Multi-agent orchestration can make failures harder to attribute and can weaken a clean decision boundary if agents bypass core evaluation/verification.
-- Tool use introduces external failure and security surfaces that must remain bounded and observable.
+- More reasoning can increase latency/cost without improving the result.
+- More reasoning can sometimes make easy answers worse through overthinking.
+- Candidate search can multiply cost and correlated errors.
+- A context gate can over-question users.
+- A weak context assessor can incorrectly block good answers.
+- Clarification can become an infinite loop.
+- Strategy correction can become unpredictable without bounded policies.
+- Provider-specific reasoning parameters must not leak into the core.
+- Stronger brevity scoring can penalize necessary detail.
+- Tools introduce external failures and security/prompt-injection surfaces.
+- Long agent loops can exhaust context and budgets.
+- Multiple agents can make failures difficult to attribute.
+- Same-model generation and verification can share correlated errors.
+- Hidden reasoning must not become a user-facing or provider-specific foundation dependency.
+- RL/reasoning-model claims must not be treated as substitutes for deterministic verification.
+- Future orchestration must not bypass hard gates, evidence precedence, or ASK boundaries.
+- No feature should be added solely because it is fashionable in current AI products; it must solve a measured Revise problem or clearly preserve an essential future contract.
 
 ---
 
-## 10. Non-Goals
+## 18. Non-Goals
 
 Do not use this work to:
 
 - redesign the UI
 - change the stable API unnecessarily
-- expose hidden chain-of-thought
-- lock the engine to a particular reasoning provider/model
+- expose raw hidden chain-of-thought
+- lock Revise to a specific reasoning provider/model
 - replace deterministic verification with LLM judgment
 - make Lite intentionally lower-quality
 - force Pro responses to be long
-- add multi-agent orchestration without evidence that it belongs in the core foundation
-- introduce a large agent framework merely because modern systems use agents
-- rewrite working foundation components without a demonstrated requirement
-- treat vendor-specific reasoning controls as Revise's permanent Power definition
+- force every task through deep reasoning
+- force every task through multiple candidates
+- turn Revise into a general agent framework immediately
+- introduce multi-agent orchestration without a demonstrated need
+- rewrite stable foundation components without evidence
+- contaminate the research-only artifact with project decisions
+- treat vendor-specific controls as the permanent definition of Power
 
 ---
 
-## 11. Current Discussion Conclusion — Not Yet Final Implementation Specification
+## 19. Current Conclusion — Discussion Still In Progress
 
-At this point we have a clearer architectural direction, but **we are not ready to draft the Foundation Agent implementation response yet**.
+The research and discussion now support a stronger but still deliberately compact foundation:
 
-What is now reasonably settled:
+1. **North star:** self-correcting AI agent behavior.
+2. **Core loop:** Attempt → Evaluate → Diagnose → Correct → Re-evaluate → Decide.
+3. **Correction is one extensible capability**, not five redundant engines.
+4. **Reasoning correction (#4) and strategy correction (#5) are the long-term differentiators** because they allow Revise to change approach rather than only rewrite output.
+5. **Power is a bounded resource envelope**, not verbosity, intent, or one provider parameter.
+6. **Adaptive effort is preferable to always-max effort.**
+7. **Context sufficiency and minimal clarification are required foundation capabilities** for reliable self-correction.
+8. **Candidate search, tools, retrieval, memory, and broad agent orchestration are future extensions**, not first-foundation requirements.
+9. **Verification remains independent and evidence-driven wherever possible.**
+10. **The core must remain provider-agnostic and bounded.**
+11. **The system should prefer the simplest sufficient strategy and escalate only when justified.**
+12. **The architecture should be capable of growing from revision to reasoning to strategy correction without being rebuilt each time.**
 
-1. **North star:** self-correcting AI agent behavior is the primary product goal.
-2. **Foundation strategy:** flexible, modular, bounded, and difficult to destabilize.
-3. **Core vs future:** self-correction belongs in the protected core; broad agentic orchestration should be an extension layer.
-4. **Power direction:** Power represents a bounded effort/resource envelope, not response length or intent. Exact mechanics remain open.
-5. **Candidate search:** desirable future capability, but not mandatory for the first rebuild.
-6. **Research role:** use the research to challenge and refine these decisions, not to blindly copy production architectures.
-7. **Research artifact separation:** the research file remains strictly research-only; all interpretation and decisions stay here.
+### Still to settle before implementation handoff
 
-### What we still need to settle before implementation
+- exact minimum diagnosis contract
+- exact first-version Power/resource mapping
+- context-sufficiency placement and evaluation method
+- clarification continuation semantics
+- triggers for more effort vs revision vs strategy change vs ASK
+- exact definition of “meaningful strategy change”
+- whether generation effort can be expressed consistently across current providers
+- how proportionality should be evaluated without verbosity bias
+- precise future extension contracts for candidate search and orchestration
+- which research claims require external verification before becoming implementation requirements
 
-- What exactly is the **minimum viable self-correction loop** we want to call the Revise core?
-- What should **Power actually control in version 1**, and what should merely be reserved in the abstraction?
-- Where should **context sufficiency** live and how should it avoid over-questioning?
-- Should clarification happen **before generation, after an initial attempt, or adaptively** depending on task type?
-- How should the engine distinguish **missing context** from **uncertainty that can be resolved through reasoning/verification**?
-- What should trigger **more effort vs revision vs verification vs ASK**?
-- What should the engine consider a **successful self-correction** beyond a higher aggregate score?
-- What contracts must be protected so future tools/search/agents cannot bypass the foundation?
-- Which research claims require external verification before they influence an implementation decision?
-
-We should continue discussing these questions before modifying/rebuilding the foundation.
-
----
-
-## 12. Final Foundation Agent Response — Reserved
-
-This section will be completed only after the research has been integrated and the design has been discussed and settled.
-
-The final response should give the Foundation Agent:
-
-1. **Clear objective**
-2. **Confirmed current problems**
-3. **Evidence and research basis**
-4. **Final architectural decision**
-5. **Exact files/layers to modify**
-6. **Required contract/model changes**
-7. **Power semantics**
-8. **Context sufficiency semantics**
-9. **ASK/clarification behavior**
-10. **State/continuation behavior**
-11. **Safety/ambiguity rules**
-12. **Tests and invariant updates**
-13. **Acceptance criteria**
-14. **Non-goals / protected elements**
-15. **Implementation sequence**
-16. **Validation plan**
-
-The Foundation Agent should implement from this final section only after the recommendation is settled.
+We should continue the discussion before writing the final Foundation Agent implementation section.
 
 ---
 
-## 13. Decision Log
+## 20. Final Foundation Agent Response — Reserved
 
-### 2026-09-14 — Research workspace separated
+This section will be completed only after the design is settled.
+
+The final handoff will contain:
+
+1. clear objective
+2. confirmed current problems
+3. research basis and evidence strength
+4. final architectural decision
+5. exact files/layers to modify
+6. contract/model changes
+7. Power semantics
+8. self-correction/diagnosis semantics
+9. context sufficiency and clarification semantics
+10. ASK/terminal-output behavior
+11. safety/ambiguity rules
+12. future extension boundaries
+13. tests and invariant updates
+14. acceptance criteria
+15. non-goals/protected elements
+16. implementation sequence
+17. validation plan
+
+No implementation should be inferred from this reserved section until it is explicitly finalized.
+
+---
+
+## 21. Decision Log
+
+### 2026-09-14 — Research workspace separation
 
 **Decision:** Keep the external reasoning/model research artifact completely clean. Project-specific analysis and implementation decisions belong only in this response document.
-
-**Decision:** Use `core/foundation_alignment_research.md` solely as the research artifact and this file as the Revise-specific interpretation/decision/handoff document.
 
 ### 2026-09-14 — Discussion Round 1: product identity and extensibility
 
@@ -492,4 +918,16 @@ The Foundation Agent should implement from this final section only after the rec
 
 **Decision:** Candidate generation/search should remain architecturally possible but optional; do not add best-of-N simply because it appears in modern systems.
 
-**Next:** Continue discussion around the minimum self-correction loop, Power semantics, context sufficiency, clarification timing, escalation rules, and protected extension boundaries before drafting the implementation response.
+### 2026-09-14 — Discussion Round 2: correction architecture
+
+**Decision:** Treat error correction, quality correction, evidence correction, reasoning correction, and strategy correction as levels of one extensible correction capability rather than five separate foundation systems.
+
+**Decision:** The protected minimum self-correction loop is Attempt → Evaluate → Diagnose → Correct → Re-evaluate → Decide.
+
+**Decision:** Future self-correction must be able to change the reasoning approach/strategy, not merely rewrite the same answer.
+
+**Decision:** Power should eventually govern a bounded resource envelope whose concrete resources can expand over time; actual effort should be adaptive and stoppable rather than always maximal.
+
+**Decision:** Candidate search, tools, retrieval, memory, and multi-agent orchestration remain future capabilities layered around the core.
+
+**Decision:** Continue discussion before drafting the final Foundation Agent implementation response.

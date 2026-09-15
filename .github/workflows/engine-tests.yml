@@ -2,7 +2,7 @@ name: Engine tests
 
 on:
   push:
-    branches: [main, phase-f-diagnosis-foundation]
+    branches: [main, phase-f-diagnosis-foundation, phase-g-power-effort]
   pull_request:
     branches: [main]
 

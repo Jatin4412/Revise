@@ -29,17 +29,17 @@ class ScriptedDeliberativePrimary:
     def deliberate(self, contract: TaskContract, prompt: str) -> str:
         del contract
         lowered = prompt.lower()
-        if "correction-planning role" in lowered:
+        if "you are the correction role in reiterate" in lowered:
             stage = "correct"
             payload = {"problem": "the current approach relies on an unsupported assumption", "objective": "rebuild the answer without that assumption", "required_change": "replace the unsupported step with a task-grounded inference", "approach": "rebuild from explicit requirements", "change_approach": True}
-        elif "planning role" in lowered:
+        elif "you are the planning role in reiterate" in lowered:
             stage = "plan"
             payload = {"approach": "use the task requirements directly", "subproblems": [], "assumptions": [], "open_questions": []}
-        elif "reasoning role" in lowered:
+        elif "you are the reasoning role in reiterate" in lowered:
             stage = "re_reason" if "targeted correction plan" in lowered else "reason"
             candidate = self.second_candidate if stage == "re_reason" else self.initial_candidate
             payload = {"candidate": candidate, "assumptions": [], "open_questions": []}
-        elif "adversarial reflection role" in lowered:
+        elif "you are the adversarial reflection role in reiterate" in lowered:
             stage = "reflect"
             try:
                 payload = next(self.reflection_sets)

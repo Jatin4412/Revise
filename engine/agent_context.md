@@ -7,32 +7,83 @@
 - Own engine implementation and engine foundation only.
 - Do not modify `web/` unless explicitly authorized.
 - Preserve the provider-agnostic architecture; provider/model selection is runtime configuration, not core decision policy.
-- Primary, Secondary, and Verifier are roles, not fixed model identities.
+- Primary, Secondary, Verifier, and future deliberation roles are logical capabilities, not fixed model identities.
 
 ## Core objective
-Build an evaluation-driven answer/revision engine that generates, independently evaluates, verifies where deterministic/external evidence exists, revises when necessary, and retains the best valid result.
+Build Reiterate as an evaluation- and deliberation-driven answer/revision engine: generate candidates through bounded reasoning, deliberately challenge the reasoning that produced them, make targeted corrections or change approach when warranted, then independently evaluate and verify the resulting candidate and retain the best valid result.
+
+The central distinction is:
+- **Deliberation generates and challenges reasoning.**
+- **Evaluation assesses candidate quality.**
+- **Verification establishes directly checkable evidence.**
+- **Decision authority controls acceptance.**
+
+Reiterate is not defined as simply running more validators or generating more words. Additional inference compute is a resource that may enable deeper deliberation, alternative approaches, correction attempts, and verification, but more compute alone is not proof of correctness.
 
 ## Core flow
 ```text
-User -> Task Contract -> Mode/Profile -> Model Router -> Primary
-     -> Evaluation + Evidence -> Revision Quality -> Decision
-        -> ACCEPT / ASK / REVISE -> Primary again
+User -> Task Contract -> Mode / Profile / Model Routing
+     -> Bounded Deliberation
+        -> Plan -> Reason -> Reflect
+        -> Correct / Change Approach when warranted
+        -> Re-reason / Re-reflect within bounds
+     -> Candidate
+     -> Secondary Evaluation + Evidence
+     -> Deterministic / External Verification
+     -> Evidence Fusion
+     -> Diagnosis (post-hoc synthesis)
+     -> Revision Quality
+     -> Decision Authority
+        -> ACCEPT / ASK / REVISE
      -> best valid version
 ```
 
+Deliberation is upstream and non-authoritative. The existing evaluation, verification, revision-quality, hard-gate, decision, and best-version mechanisms remain the trusted control layer.
+
 ## Foundation principles
 1. User intent and explicit mode are authoritative.
-2. Auto chooses effort/verification, not intent.
-3. Evaluation is multidimensional and task-specific.
-4. Deterministic/external evidence beats model opinion when available.
-5. Secondary returns reasons, issues, confidence, and revision guidance.
-6. Unknown/low-confidence evaluation is not a pass.
-7. Revisions must demonstrate improvement; regressions can revert to the best valid version.
-8. Do not ask Secondary to judge things that can be directly verified.
-9. Hard gates apply to safety/security/critical constraints; soft scores apply to quality/style dimensions.
-10. Missing information should lead to asking rather than inventing.
-11. Strongest appropriate configured model belongs in Primary unless explicitly overridden.
-12. More words do not mean better output.
+2. The Task Contract defines the problem boundary; deliberation cannot silently redefine it.
+3. Deliberation may challenge assumptions, interpretations, reasoning paths, and conclusions, but cannot authorize acceptance.
+4. Reflection is adversarial self-questioning: it asks what could make the current reasoning wrong, incomplete, unsupported, contradictory, or based on a poor approach.
+5. Correction is a targeted hypothesis about how to improve reasoning, not proof that the correction is valid.
+6. Every materially corrected candidate must independently pass the applicable evaluation and verification path.
+7. Evaluation is multidimensional and task-specific.
+8. Deterministic/external evidence beats model opinion when the property can be directly verified.
+9. Secondary returns reasons, issues, confidence, and revision guidance; it does not become final decision authority.
+10. Unknown/low-confidence evaluation is not a pass.
+11. Diagnosis is post-hoc synthesis of observed failures/improvements, not the reasoning engine and not acceptance authority.
+12. Revisions must demonstrate improvement; regressions can revert to the best valid version.
+13. Do not ask a model evaluator to judge things that can be directly verified.
+14. Hard gates apply to safety/security/critical constraints; soft scores apply to quality/style dimensions.
+15. Missing information or material ambiguity should lead to asking rather than inventing.
+16. Strongest appropriate configured model belongs in Primary unless explicitly overridden.
+17. More words, more tokens, more verification passes, or more deliberation do not inherently mean better output.
+18. Flexible reasoning must have less authority than rigid evidence and decision policy.
+19. Provider/model selection remains runtime configuration; roles must not encode provider-specific reasoning assumptions.
+20. Prefer bounded, inspectable, additive reasoning mechanisms over generic agent frameworks or uncontrolled autonomous loops.
+
+## Authority model
+```text
+Highest authority
+    ↓
+Decision / hard gates / required verification
+    ↓
+Deterministic and directly verifiable external evidence
+    ↓
+Evaluation
+    ↓
+Diagnosis
+    ↓
+Reflection
+    ↓
+Correction planning
+    ↓
+Reasoning / planning
+    ↓
+Most flexible, least authoritative
+```
+
+A lower layer may propose information or changes to a higher layer, but cannot override it. In particular, a reflection saying `ACCEPT_CANDIDATE` or a correction saying that a problem is fixed does not authorize acceptance.
 
 ## Current implementation
 - Task contracts/state, Lite/Basic/Pro/Auto modes, adaptive evaluation profiles, evidence fusion, decision engine, bounded revision loop, versioning, and best-version selection exist.
@@ -62,7 +113,8 @@ User -> Task Contract -> Mode/Profile -> Model Router -> Primary
 - Evaluator results are validated before evidence fusion/decision. Missing dimensions, invalid statuses, non-finite/out-of-range scores or confidence, and unexpected dimensions become a fail-closed unknown/ASK state.
 - `stopping_conditions` supports `stop_on_no_improvement`, which terminates further revision when the latest revision does not demonstrate improvement; unsupported stopping conditions are rejected at profile construction.
 - Best-version selection excludes revisions marked `regressed` or `unchanged`, preventing a rejected revision from displacing a stronger prior candidate.
-- Latest stabilization work fixes required-dimension uniqueness validation and external verifier registry semantics; external source-limit regression coverage now explicitly distinguishes deduplication from source-count overflow.
+- Latest stabilization work fixes required-dimension uniqueness validation and external verifier registry semantics; external source-limit regression coverage explicitly distinguishes deduplication from source-count overflow.
+- Phase-F diagnosis work has been designed as a minimal provider-neutral diagnostic contract with explicit authority boundaries; it must remain subordinate to decision authority if/when merged.
 
 ## Current model/runtime policy
 - Default Primary: `gemini / gemini-3.7-flash`.
@@ -120,17 +172,72 @@ User -> Task Contract -> Mode/Profile -> Model Router -> Primary
 - Service compatibility is covered for concrete and lightweight/injected engine implementations.
 - Future work can add authenticated/protected development access or richer status views without coupling the core engine to UI concerns.
 
-## Foundation stabilization — current phase
-- Policy objects fail closed when structurally invalid.
-- Hard-gate policy is enforced by the decision layer rather than being decorative configuration.
-- Missing configured deterministic/external verifiers fail closed rather than disappearing from the evaluation path.
-- Verification budgets now have runtime semantics.
-- Evidence requirements now affect acceptance.
-- Evaluator result validation now fails closed.
-- `stop_on_no_improvement` and best-version invariants are implemented.
-- Stabilization regression fixes are now present on the working branch; local execution remains the final confirmation point before merging to `main`.
+## Phase F — Diagnosis boundary (designed / partial)
+- Diagnosis is treated as post-hoc synthesis, not the core reasoning mechanism.
+- A minimal provider-neutral Diagnosis vocabulary has been explored: `REVISE`, `VERIFY`, `CHANGE_APPROACH`, `ASK`, and `ACCEPT_CANDIDATE`.
+- Structural validation must fail closed.
+- Diagnosis may recommend an action but cannot override deterministic failures, hard gates, required verification, or final Decision authority.
+- Before merging or extending Phase F, preserve these authority boundaries and avoid turning Diagnosis into a generic strategy framework.
+
+## Phase G — Deliberative reasoning foundation (next)
+
+### Objective
+Prove that a bounded `Plan -> Reason -> Reflect -> Correct/Change Approach -> Re-reason -> Re-reflect` loop can improve reliability on tasks where deterministic verification cannot fully establish correctness, while preserving the existing authoritative evaluation/verification/decision foundation.
+
+### Foundation model
+- **Plan**: form a task-bounded approach or decomposition when useful.
+- **Reason**: develop the candidate or intermediate reasoning state.
+- **Reflect**: deliberately search for reasons the current reasoning may be wrong, incomplete, unsupported, contradictory, misinterpreted, or based on an unsuitable approach.
+- **Correct**: convert a reflection finding into a targeted correction objective; changing approach is allowed when the issue is methodological rather than local.
+- **Re-reason / Re-reflect**: independently reconsider the changed candidate before it enters the authoritative evaluation path.
+
+These are logical capabilities, not necessarily separate agents or models. The first implementation should permit the same configured model to perform multiple roles through provider-neutral contracts, while keeping role boundaries explicit.
+
+### New contracts to design
+1. `ReasoningState` — minimal state needed to preserve task interpretation, current approach, assumptions, unresolved questions, candidate conclusion, and uncertainty.
+2. `Reflection` — structured concerns, challenged assumptions, missing steps, contradictions, alternative interpretations/approaches, confidence, and a non-authoritative recommendation.
+3. `CorrectionPlan` — issue, cause hypothesis, correction objective, required change, and selected approach.
+4. `Candidate` lifecycle metadata — enough to distinguish original reasoning, corrected reasoning, and independently evaluated versions without exposing raw internal reasoning as a user-facing contract.
+
+### Required authority rules
+- Reflection cannot authorize acceptance.
+- Correction cannot establish its own correctness.
+- A corrected candidate must be re-evaluated and re-verified as applicable.
+- Deterministic/external failures and hard gates cannot be overridden by deliberation.
+- Missing information remains an `ASK` path rather than an invented assumption.
+- Deliberation must be bounded; no autonomous infinite loops.
+
+### Initial reasoning benchmark
+Build adversarial tests around:
+- hidden assumption;
+- wrong reasoning approach;
+- missing inference step;
+- ambiguity requiring clarification;
+- contradiction;
+- weak/unsupported evidence;
+- self-reinforcing error that reflection misses but verification catches;
+- false correction that introduces a regression;
+- genuine correction that improves the candidate;
+- already-correct/easy task where unnecessary deliberation should not manufacture a problem.
+
+### Explicitly deferred from Phase G
+- Power/Effort as a new abstraction.
+- Generic `Agent`, `Strategy`, or orchestration frameworks.
+- Tree search / MCTS / broad search infrastructure.
+- Autonomous tool use or browser loops.
+- Persistent memory.
+- Multi-agent orchestration.
+- Provider-specific reasoning controls in the core.
+- UI changes.
+
+Power/Effort may be revisited only after deliberation itself is proven. Its eventual meaning should be an adaptive compute policy spanning reasoning depth, reflection opportunities, alternative approaches, correction attempts, verification, and escalation—not merely a count of verification passes.
 
 ## Roadmap after stabilization
+### Immediate
+- Finalize and review the foundation changes for deliberative reasoning before implementation.
+- Inspect current engine contracts and lifecycle to identify the smallest additive insertion point for bounded deliberation.
+- Design Phase-G contracts and lifecycle tests before implementing the loop.
+
 ### Phase C follow-up
 - Add genuine sandboxed code execution/tests only when secure bounded infrastructure is available.
 - Add richer external evidence adapters that can verify structured source metadata or task-specific facts without conflating reachability with claim truth.
@@ -146,10 +253,12 @@ User -> Task Contract -> Mode/Profile -> Model Router -> Primary
 1. Read this file first.
 2. Inspect relevant current `engine/` and `core/` files.
 3. Check for conflicts with the foundation.
-4. Prefer the smallest additive change.
-5. Test affected behavior before completion.
-6. Update this file for durable changes.
-7. If an approach cycles or fails repeatedly, stop and reassess instead of retrying blindly.
+4. Preserve the authority boundary: flexible deliberation cannot override rigid evidence or decision policy.
+5. Prefer the smallest additive change.
+6. Design contracts and tests before introducing new orchestration.
+7. Test affected behavior before completion.
+8. Update this file for durable changes.
+9. If an approach cycles or fails repeatedly, stop and reassess instead of retrying blindly.
 
 ## UI handoff for current model changes
 The UI agent owns `web/`. For the current test selector, use these runtime selections:

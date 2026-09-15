@@ -13,8 +13,7 @@
 ## Authoritative architecture
 ```text
 User
- -> Initial Context (optional bounded conversation)
- -> Task Contract
+ -> Task Contract + Initial Context (optional bounded conversation)
  -> Mode / Evaluation Profile / Model Routing
  -> Bounded Deliberation
       Plan -> Reason -> Reflect
@@ -135,9 +134,8 @@ Provide a real, bounded `Plan -> Reason -> Reflect -> Correct -> Re-reason -> Re
 - `DeliberationLimits`: independent `max_cycles` and `max_correction_attempts`.
 
 ### Model usage
-- `LLMPrimary.deliberate(contract, prompt, initial_context)` reuses the same configured Primary model and provider adapter for planning, reasoning, reflection, correction planning, and re-reasoning.
-- No provider-specific reasoning API is used.
-- Legacy/custom Primary adapters without `deliberate()` remain compatible with ordinary generation fallbacks.
+- The configured Primary provider/model is reused across the deliberation lifecycle; no provider-specific reasoning API is required.
+- The deliberation implementation invokes the Primary's structured deliberation capability when supported and falls back to ordinary generation for legacy/custom Primary adapters.
 - Deliberation prompts explicitly prohibit task-contract mutation, final decision authority, and raw chain-of-thought disclosure.
 
 ### Runtime insertion point

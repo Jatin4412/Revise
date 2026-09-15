@@ -1,6 +1,6 @@
 # Evaluation Profile
 
-An Evaluation Profile defines the smallest useful evaluation plan for a task.
+An Evaluation Profile defines the smallest useful evaluation and verification plan for a task. It governs the authoritative assessment path; it does not dictate a single reasoning strategy.
 
 ## Responsibilities
 
@@ -8,6 +8,21 @@ An Evaluation Profile defines the smallest useful evaluation plan for a task.
 - Define hard gates, deterministic checks, external verification, and model-based evaluators.
 - Set evaluation effort, verification budget, revision budget, and stopping conditions.
 - Validate that thresholds, weights, required dimensions, and budgets form a coherent policy before execution.
+- Provide the control boundary against which candidates produced through deliberation are assessed.
+
+## Deliberation relationship
+
+Evaluation Profile and deliberation are complementary but distinct.
+
+The profile answers:
+
+> **What must be true for this task to be considered acceptable?**
+
+Deliberation answers:
+
+> **How should the system reason, reconsider, or change approach before presenting a candidate for evaluation?**
+
+A profile may influence whether additional deliberation is warranted through task characteristics, risk, effort, or budgets, but it must not encode a rigid universal reasoning procedure. Deliberation remains bounded and non-authoritative.
 
 ## Policy contract
 
@@ -17,7 +32,7 @@ An `EvaluationProfile` is executable policy, not just configuration. Its dimensi
 
 When a Task Contract carries an explicit `output_schema`, the profile selects the deterministic `json_schema` check. This preserves the user's explicit structured-output requirement while keeping verification bounded and provider-neutral.
 
-The schema verifier is preferred over model judgment for directly verifiable structural properties, but it does not replace semantic evaluation by the Secondary.
+The schema verifier is preferred over model judgment for directly verifiable structural properties, but it does not replace semantic evaluation by the Secondary or deliberative reasoning that precedes it.
 
 ## External source verification
 
@@ -31,7 +46,10 @@ External checks are bounded by the verification budget and use provider-neutral 
 - Deterministic and external checks should be preferred when they can directly verify a property.
 - Explicit user mode is authoritative for expected effort/depth.
 - Lite reduces effort, not correctness requirements.
-- Auto selects effort based on task characteristics and risk without changing intent.
+- Auto may select additional reasoning or verification effort based on task characteristics and risk without changing user intent.
+- More inference compute is a resource, not proof of correctness.
+- Do not equate effort with repeated verification passes. Future effort controls may govern deliberation depth, reflection opportunities, alternative approaches, correction attempts, and verification/escalation together.
 - A policy field must have runtime semantics before it is treated as authoritative foundation behavior.
+- Deliberation may explore and propose; evaluation and verification establish evidence; decision authority enforces the final policy.
 
 The runtime representation is `engine/revise/models.py`; profile construction is `engine/revise/profile.py`; external source verification is implemented in `engine/revise/external.py`.

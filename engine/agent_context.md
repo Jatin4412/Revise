@@ -5,13 +5,15 @@
 ## Scope
 - Repository: `Jatin4412/Revise`.
 - Engine-owned implementation is under `engine/`.
-- Do not modify `web/` unless explicitly authorized.
-- Core/foundation files are authoritative and must be read-only from this agent.
+- `engine/agent_context.md` is an engine-agent context file and may be updated by the Engine Agent when durable engine context changes.
+- Do not modify `web/` or other non-engine project areas unless explicitly authorized.
+- Foundation/core architecture remains authoritative; changes to foundation-owned files must be coordinated with the Foundation Agent.
 - Provider/model selection is runtime configuration; roles are logical capabilities, not fixed model identities.
 
 ## Authoritative architecture
 ```text
 User
+ -> Initial Context (optional bounded conversation)
  -> Task Contract
  -> Mode / Evaluation Profile / Model Routing
  -> Bounded Deliberation
@@ -44,12 +46,79 @@ No deliberation role can accept, reject, redefine the Task Contract, bypass veri
 
 ## Current implementation baseline
 - `TaskContract` preserves goal, requirements, constraints, output characteristics, context, assumptions, success criteria, verification requirements, and optional output schema.
-- `EvaluationProfile` provides evaluation dimensions, hard gates, evidence requirements, deterministic/external checks, thresholds, revision budget, verification budget, and stopping conditions.
+- `InitialContext` is an optional provider-neutral boundary for bounded prior conversation. It is distinct from `TaskContract` and does not redefine the current task.
+- `EvaluationProfile` provides evaluation dimensions, hard gates, evidence requirements, deterministic/external checks, thresholds, revision budget, verification budget, stopping conditions, and bounded deliberation budgets.
 - Secondary evaluation is validated fail-closed before evidence fusion and decision.
 - Deterministic verification includes arithmetic, Python syntax/compile-only, JSON, and bounded JSON-schema checks.
 - External verification is bounded source reachability only and cannot claim semantic factual support.
 - Evidence precedence, hard gates, evidence requirements, revision-quality comparison, regression handling, stopping conditions, and best-version selection remain authoritative.
-- Stable HTTP boundaries are unchanged.
+- Stable HTTP boundaries are unchanged except for the additive optional `conversation` request field.
+
+## Conversation Context Boundary
+### Objective
+Allow the engine to receive prior messages from the active conversation without turning them into persistent memory, merging them into the Task Contract, or changing authoritative evaluation scope.
+
+### Input contract
+The HTTP request accepts:
+- `prompt`: the current authoritative user task.
+- `conversation`: optional array of prior messages.
+
+Each conversation entry must contain:
+- `role`: exactly `user` or `assistant`.
+- `content`: a string.
+
+Validation fails closed for malformed conversation entries. An omitted conversation and an empty conversation are semantically equivalent for execution. Conversation contents are never promoted into `TaskContract.goal`.
+
+### InitialContext
+`engine/context.py` defines the provider-neutral boundary:
+- `ConversationMessage` represents one bounded historical message.
+- `InitialContext` carries bounded messages plus aggregate metadata.
+- `parse_conversation()` validates and deterministically bounds raw request input.
+- `render_initial_context()` provides the provider-facing representation while preserving the distinction between historical context and authoritative current instructions.
+
+Current deterministic bounds are:
+- maximum 20 conversation messages;
+- maximum 12,000 total included conversation characters;
+- maximum 4,000 characters per individual message.
+
+Bounding keeps the newest complete messages that fit within the total budget and preserves their original chronological order. Oversized individual messages are excluded rather than silently truncated.
+
+### Runtime propagation
+`Engine.run(initial_context=...)` accepts the optional `InitialContext` and renders it once for the current run. The same bounded context is supplied to Primary and the deliberation lifecycle.
+
+The deliberation stages that receive the same context are:
+- Plan
+- Reason
+- Reflect
+- Correct
+- Re-reason
+- Re-reflect
+
+Evaluation remains scoped to the current `TaskContract` and candidate. Conversation context may help interpret the current task but is not itself an evaluation target.
+
+### Trace and privacy boundary
+Trace metadata may expose only safe aggregate context information:
+- supplied
+- bounded
+- original message count
+- included message count
+
+Conversation contents are excluded from trace metadata and response contracts. No persistent conversation memory, retrieval, embeddings, or cross-run context store is introduced by this boundary.
+
+### Compatibility
+Requests without `conversation` preserve prior single-turn behavior. Legacy/custom Primary adapters without the newer deliberation/context capability remain compatible through existing fallbacks.
+
+### Required invariants
+1. `prompt` remains the current authoritative task.
+2. Historical conversation is context, not a replacement for the Task Contract.
+3. Malformed context fails closed.
+4. Bounds are deterministic and applied before inference.
+5. Primary and deliberation receive the same bounded context.
+6. Evaluation does not become a conversation-scoring operation.
+7. No persistent memory is introduced.
+8. Trace never stores raw conversation content.
+9. Response contracts remain unchanged.
+10. Omitted/empty conversation preserves single-turn semantics.
 
 ## Phase-G deliberation implementation
 ### Objective
@@ -66,13 +135,13 @@ Provide a real, bounded `Plan -> Reason -> Reflect -> Correct -> Re-reason -> Re
 - `DeliberationLimits`: independent `max_cycles` and `max_correction_attempts`.
 
 ### Model usage
-- `LLMPrimary.deliberate(contract, prompt)` reuses the same configured Primary model and provider adapter for planning, reasoning, reflection, correction planning, and re-reasoning.
+- `LLMPrimary.deliberate(contract, prompt, initial_context)` reuses the same configured Primary model and provider adapter for planning, reasoning, reflection, correction planning, and re-reasoning.
 - No provider-specific reasoning API is used.
-- Legacy/custom Primary adapters without `deliberate()` remain compatible and fall back to ordinary `generate()`.
+- Legacy/custom Primary adapters without `deliberate()` remain compatible with ordinary generation fallbacks.
 - Deliberation prompts explicitly prohibit task-contract mutation, final decision authority, and raw chain-of-thought disclosure.
 
 ### Runtime insertion point
-`engine/engine.py` now invokes `run_deliberation()` at the start of each candidate-generation/revision attempt. The resulting candidate is then passed unchanged into the existing evaluation -> verification -> evidence fusion -> diagnosis -> revision assessment -> decision path.
+`engine/engine.py` invokes `run_deliberation()` at the start of each candidate-generation/revision attempt. The resulting candidate is then passed unchanged into the existing evaluation -> verification -> evidence fusion -> diagnosis -> revision assessment -> decision path.
 
 The existing revision loop remains intact: if Decision returns `REVISE`, the next attempt receives the existing evaluation-derived revision context and can itself run a fresh bounded deliberation.
 
@@ -124,6 +193,16 @@ The current main branch did not yet contain the Phase-F diagnosis runtime despit
 This is intentionally smaller than the previously explored Phase-F recommendation vocabulary; richer correction recommendations remain deferred until they can be introduced without duplicating deliberation policy.
 
 ## Test coverage
+`engine/test_conversation_context.py` covers:
+- omitted conversation;
+- empty conversation;
+- user + assistant ordering and Primary propagation;
+- current prompt remaining the Task Contract goal;
+- deliberation receiving the same context;
+- malformed roles/content failing closed;
+- deterministic bounding;
+- trace containing only safe aggregate metadata and no conversation contents.
+
 `engine/test_deliberation.py` covers:
 - genuine correction followed by re-reflection and acceptance;
 - false correction not being accepted blindly;
@@ -151,14 +230,15 @@ Existing engine tests remain the regression suite and are discovered by the exis
 - Replacing Secondary evaluation, verification, revision quality, best-version selection, or Decision authority.
 
 ## Review invariants
-Before extending deliberation, verify:
+Before extending deliberation or conversation context, verify:
 1. User intent and explicit Task Contract remain immutable.
-2. Reflection is adversarial and non-authoritative.
-3. Correction is a hypothesis, never proof.
-4. Corrected candidates reach independent evaluation and applicable verification.
-5. Deterministic/external evidence and hard gates retain precedence.
-6. Diagnosis remains post-hoc and subordinate to Decision.
-7. Deliberation is explicitly bounded.
-8. Malformed model output fails safely.
-9. Provider/model selection remains generic.
-10. Existing behavior remains compatible when deliberation is disabled or unsupported.
+2. Conversation context is optional, bounded, provider-neutral, and non-authoritative.
+3. Reflection is adversarial and non-authoritative.
+4. Correction is a hypothesis, never proof.
+5. Corrected candidates reach independent evaluation and applicable verification.
+6. Deterministic/external evidence and hard gates retain precedence.
+7. Diagnosis remains post-hoc and subordinate to Decision.
+8. Deliberation is explicitly bounded.
+9. Malformed model output and malformed request context fail safely.
+10. Provider/model selection remains generic.
+11. Existing behavior remains compatible when deliberation/context is disabled or unsupported.

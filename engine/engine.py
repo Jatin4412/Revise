@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable, Iterable
 
+from .context import InitialContext, render_initial_context
 from .execution import ExecutionTrace, TraceEvent
 from .providers import Primary, Secondary, Verifier
 from .revise.deliberation import DeliberationLimits, DeliberationResult, run_deliberation
@@ -38,20 +39,31 @@ class Engine:
         self.verifier = verifier
         self.trace_sink = trace_sink
 
-    def run(self, contract: TaskContract, *, profile: EvaluationProfile | None = None, initial_context: str | None = None, evidence: Iterable[Evidence] = (), primary: Primary | None = None, secondary: Secondary | None = None) -> EngineResult:
+    def run(self, contract: TaskContract, *, profile: EvaluationProfile | None = None, initial_context: InitialContext | str | None = None, evidence: Iterable[Evidence] = (), primary: Primary | None = None, secondary: Secondary | None = None) -> EngineResult:
         profile = profile or build_profile(contract)
         active_primary = primary or self.primary
         active_secondary = secondary or self.secondary
         supplied_evidence = tuple(evidence)
+        conversation_context = render_initial_context(initial_context)
         versions: list[Version] = []
         previous: Version | None = None
         trace = ExecutionTrace()
         self._emit(trace, "request", "received", mode=contract.mode.value)
+        if isinstance(initial_context, InitialContext):
+            self._emit(
+                trace,
+                "conversation_context",
+                "received",
+                supplied=initial_context.supplied,
+                bounded=initial_context.bounded,
+                original_message_count=initial_context.original_message_count,
+                included_message_count=initial_context.included_message_count,
+            )
         self._emit(trace, "contract", "created", requirements=len(contract.requirements), constraints=len(contract.constraints))
         self._emit(trace, "profile", "selected", dimensions=", ".join(profile.dimensions), effort=profile.evaluation_effort, max_revisions=profile.max_revisions, max_verification_steps=profile.max_verification_steps, max_deliberation_cycles=profile.max_deliberation_cycles, max_correction_attempts=profile.max_correction_attempts)
 
         for revision_index in range(profile.max_revisions + 1):
-            context = initial_context if previous is None else self._revision_context(previous)
+            context = conversation_context if previous is None else self._revision_context(previous)
             version_id = f"v{len(versions)}"
             self._emit(trace, "primary", "start", provider=_provider_name(active_primary), model=_model_name(active_primary), version=version_id, revision=revision_index)
             deliberation = self._deliberate(contract, active_primary, context, profile, trace)
@@ -170,8 +182,10 @@ class Engine:
     def _emit(self, trace: ExecutionTrace, stage: str, event_status: str, **details: object) -> None:
         event = trace.record(stage, event_status, **details)
         if self.trace_sink is not None:
-            try: self.trace_sink(event)
-            except Exception: pass
+            try:
+                self.trace_sink(event)
+            except Exception:
+                pass
 
     @staticmethod
     def _revision_context(previous: Version) -> str:

@@ -4,6 +4,7 @@ import os
 from dataclasses import dataclass
 
 from .contracts import make_contract
+from .context import InitialContext, parse_conversation
 from .engine import Engine, EngineResult
 from .execution import console_trace_sink
 from .llm import build_primary, build_secondary
@@ -19,6 +20,7 @@ class EngineRequest:
     model: ModelSelection | None = None
     primary_model: ModelSelection | None = None
     secondary_model: ModelSelection | None = None
+    conversation: InitialContext | None = None
 
 
 @dataclass(frozen=True)
@@ -98,7 +100,7 @@ class EngineService:
         # themselves, so only reject an absent Primary when the concrete engine does.
         if primary is None and isinstance(self.engine, Engine):
             raise ValueError("no primary model is configured")
-        return self.engine.run(contract, primary=primary, secondary=secondary)
+        return self.engine.run(contract, initial_context=request.conversation, primary=primary, secondary=secondary)
 
     @staticmethod
     def _response(result: EngineResult) -> EngineResponse:
@@ -117,7 +119,8 @@ class EngineService:
             raise ValueError(f"unsupported mode: {raw_mode}") from exc
         primary = _parse_model_selection(payload.get("primary_model")) or _parse_model_selection(payload.get("model"))
         secondary = _parse_model_selection(payload.get("secondary_model"))
-        return EngineRequest(prompt=prompt, mode=mode, primary_model=primary, secondary_model=secondary)
+        conversation = parse_conversation(payload.get("conversation"), supplied="conversation" in payload)
+        return EngineRequest(prompt=prompt, mode=mode, primary_model=primary, secondary_model=secondary, conversation=conversation)
 
 
 def create_default_service() -> EngineService:

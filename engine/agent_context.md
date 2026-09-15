@@ -3,24 +3,44 @@
 > Read this file before engine decisions or implementation changes. Update it when durable engine status, architecture, decisions, limitations, or roadmap change.
 
 ## Ownership and scope
-- Repository: `Jatin4412/Revise`
-- Own engine implementation and engine foundation only.
+- Repository: `Jatin4412/Revise`.
+- This is the engine agent context file; the engine agent owns it and the `engine/` implementation.
+- Core/foundation files remain foundation-owned; read/review them when needed, but do not modify them from this agent.
 - Do not modify `web/` unless explicitly authorized.
-- Preserve the provider-agnostic architecture; provider/model selection is runtime configuration, not core decision policy.
-- Primary, Secondary, and Verifier are roles, not fixed model identities.
+- Preserve provider-agnostic architecture; Primary, Secondary, and Verifier are roles, not fixed model identities.
 
 ## Core objective
-Build an evaluation-driven answer/revision engine that generates, independently evaluates, verifies where deterministic/external evidence exists, revises when necessary, and retains the best valid result.
+Build a trustworthy self-correcting answer/revision engine that generates, evaluates, verifies where deterministic/external evidence exists, diagnoses observed failure, selects a bounded correction path, and retains the best valid result.
 
-## Core flow
+## Current stable architecture
 ```text
 User -> Task Contract -> Mode/Profile -> Model Router -> Primary
-     -> Evaluation + Evidence -> Revision Quality -> Decision
-        -> ACCEPT / ASK / REVISE -> Primary again
-     -> best valid version
+     -> Evaluation + Evidence -> Diagnosis -> Correction Recommendation
+     -> existing Decision Authority -> bounded correction
+     -> Evaluation + Evidence -> Revision Assessment -> Best Valid Version
 ```
 
-## Foundation principles
+The foundation contract remains authoritative and must not be weakened by adaptive behavior.
+
+## Authority hierarchy
+Authoritative:
+1. Task Contract
+2. Hard Gates
+3. Deterministic Verification
+4. Required Evidence
+5. Decision Policy
+6. Revision Assessment
+7. Best-Version Selection
+
+Advisory:
+- Model Evaluation
+- Diagnosis
+- Correction Recommendation
+- Approach Classification
+
+Invariant: advisory diagnosis/recommendation may redirect correction, but can never weaken, bypass, erase, or override an authoritative failure.
+
+## Durable principles
 1. User intent and explicit mode are authoritative.
 2. Auto chooses effort/verification, not intent.
 3. Evaluation is multidimensional and task-specific.
@@ -30,117 +50,161 @@ User -> Task Contract -> Mode/Profile -> Model Router -> Primary
 7. Revisions must demonstrate improvement; regressions can revert to the best valid version.
 8. Do not ask Secondary to judge things that can be directly verified.
 9. Hard gates apply to safety/security/critical constraints; soft scores apply to quality/style dimensions.
-10. Missing information should lead to asking rather than inventing.
+10. Missing information leads to asking rather than inventing.
 11. Strongest appropriate configured model belongs in Primary unless explicitly overridden.
 12. More words do not mean better output.
+13. Diagnosis is advisory; it is never a second Decision engine.
+14. `ACCEPT_CANDIDATE` is advisory only; only existing Decision can produce terminal `ACCEPT`.
+15. An authoritative failure must be independently cleared by the authoritative machinery on any new attempt.
 
-## Current implementation
-- Task contracts/state, Lite/Basic/Pro/Auto modes, adaptive evaluation profiles, evidence fusion, decision engine, bounded revision loop, versioning, and best-version selection exist.
-- TaskContract carries optional explicit `output_schema` for machine-checkable structured output requirements.
-- Provider-neutral Primary/Secondary/Verifier protocols exist.
-- Runtime adapters currently support Gemini, Groq, OpenRouter, OpenAI, and Grok; Ollama remains intentionally outside the current selector/testing setup.
-- Structured Secondary evaluation exists.
-- HTTP boundary remains stable: `GET /health`, `POST /v1/engine`, success `{text, decision, version_id}`, generic error `{error:{code,message}}`.
-- Phase A execution observability is complete: structured trace records request, contract/profile, Primary, Secondary, per-dimension evaluation, verifier, decision, revisions, and final selection. Trace excludes prompts, responses, and credentials. Console trace is enabled for the local default service.
-- Phase E adds an additive development-only response path at `POST /v1/engine/trace`. It returns the normal `{text, decision, version_id}` plus serialized safe trace events; the existing `/v1/engine` response is unchanged.
-- Local end-to-end runtime has been verified for Gemini 3.1 Flash-Lite, OpenRouter Free, Groq GPT-OSS 120B, and Gemini 3.7 Flash after retry.
-- Phase C deterministic verification includes arithmetic consistency, Python AST syntax checking, Python compile-only checking, JSON syntax, and explicit JSON schema validation. Generated Python is never executed.
-- Richer JSON schema validation supports primitive/object/array types, required properties, nested properties/items, additional-property control, enum/const, string length/pattern constraints, numeric minimum/maximum, array size/uniqueness constraints, and local `#/...` references. Unsupported or malformed schemas fail closed.
-- Phase C external source verification exists in `engine/revise/external.py`. Research/source/citation/factual profiles select it separately from `groundedness` and `evidence_quality`. The default verifier checks bounded HTTP(S) source reachability only, rejects private/loopback/link-local/reserved targets, rejects embedded URL credentials, validates redirect targets, limits sources and bytes, and never claims that reachability proves factual support.
-- External verification failures participate in evidence precedence and block acceptance when a required cited source is unreachable or required citations are missing.
-- Phase D revision quality is implemented in `engine/revise/revision.py`. Each revision is compared with its immediately previous evaluated version; the engine tracks score delta/net improvement, resolved and introduced issues, improved and regressed dimensions, and an overall revision status.
-- Revision issue identity is stable across severity changes using issue type, location, and normalized description. Severity changes are tracked separately as downgraded or escalated issues; escalations are regressions and downgrades count as improvement signals.
-- Phase D decision policy rejects unchanged or regressed revisions, while allowing revisions with a genuine score/dimension improvement or relevant issue resolution. Material introduced issues and dimension regressions are treated as regressions. The best valid prior version remains selectable when a later revision is rejected.
-- Revision assessment is stored in `Version.metadata` and summarized in the development trace; response payloads remain excluded from trace details.
-- Phase E service compatibility was hardened so the application boundary does not assume concrete `Engine` internals when used with injected or lightweight engine implementations.
-- EvaluationProfile validates its policy structure at construction: non-empty unique dimensions, valid required-dimension references, finite bounded thresholds, supported effort values, non-negative integer budgets, and non-empty policy selectors.
-- Profile construction considers the full task-contract text relevant to evaluation selection, including desired format/length/style, assumptions, success criteria, and verification requirements.
-- Configured hard-gate issue types are enforced by the decision layer before ordinary severity/score acceptance checks.
-- Configured deterministic and external verifiers fail closed when a requested verifier is missing from the registry instead of silently skipping verification.
-- `max_verification_steps` is now an actual execution budget: configured deterministic/external verifier steps beyond the budget produce explicit failing evidence rather than silently disappearing. Source-count limits remain separate from verifier-step limits.
-- `evidence_requirements` now participate in acceptance: every configured requirement must match a passing evidence item.
-- Evaluator results are validated before evidence fusion/decision. Missing dimensions, invalid statuses, non-finite/out-of-range scores or confidence, and unexpected dimensions become a fail-closed unknown/ASK state.
-- `stopping_conditions` supports `stop_on_no_improvement`, which terminates further revision when the latest revision does not demonstrate improvement; unsupported stopping conditions are rejected at profile construction.
-- Best-version selection excludes revisions marked `regressed` or `unchanged`, preventing a rejected revision from displacing a stronger prior candidate.
-- Latest stabilization work fixes required-dimension uniqueness validation and external verifier registry semantics; external source-limit regression coverage now explicitly distinguishes deduplication from source-count overflow.
+## Current implementation baseline
+- Task contracts/state, Lite/Basic/Pro/Auto modes, adaptive profiles, evidence fusion, Decision, bounded revision, versioning, best-version selection, provider-neutral Primary/Secondary/Verifier protocols, HTTP service boundary, and safe development trace exist.
+- `TaskContract.output_schema` supports deterministic JSON schema verification.
+- Deterministic verification includes arithmetic, Python AST syntax, Python compile-only, JSON syntax, and JSON schema validation; generated Python is never executed.
+- External verification is bounded HTTP(S) source reachability only, with SSRF/redirect/size/source limits; reachability is not claim-truth verification.
+- Evidence requirements, verifier budgets, stopping conditions, hard gates, malformed evaluation handling, malformed evidence handling, revision-quality assessment, issue identity/severity tracking, and best-version regression protection are implemented.
+- `ASK` is a first-class terminal outcome when reliable completion is blocked; terminal ASK must never expose a rejected candidate as the final answer.
+- Development trace excludes prompts, responses, credentials, and sensitive payloads; non-loopback trace access requires the configured token.
+- Current runtime adapters support Gemini, Groq, OpenRouter, OpenAI, and Grok; Ollama remains outside the current selector/testing setup.
 
-## Current model/runtime policy
-- Default Primary: `gemini / gemini-3.7-flash`.
-- Default Secondary: `gemini / gemini-3.1-flash-lite`.
-- Current free testing lineup: Gemini 3.7 Flash, Gemini 3.1 Flash-Lite, Groq GPT-OSS 120B, and OpenRouter Free.
-- Groq uses the official OpenAI-compatible Chat Completions endpoint with `openai/gpt-oss-120b`.
-- OpenRouter uses the OpenAI-compatible Chat Completions endpoint with `openrouter/free`.
-- Groq/OpenRouter compatible requests send `User-Agent: ReviseEngine/0.1`.
-- Grok and OpenAI adapters remain supported for users with paid API access but are not presented as free choices.
+## Phase-F implementation contract — LOCKED
 
-## Provider testing status
-- Primary-only matrix: 4 providers x 3 prompts completed with 2 transient failures on Gemini 3.7 Flash; Gemini 3.1, Groq, and OpenRouter were 3/3.
-- Full-pipeline matrix: 4 providers x 3 prompts completed with 0 failures.
-- Current provider testing is considered green; transient Gemini capacity errors are treated as provider availability rather than engine defects.
+### Target lifecycle
+```text
+Evaluation
+    ↓
+Evidence
+    ↓
+Diagnosis
+    ↓
+Correction Recommendation
+    ↓
+Existing Decision Authority
+    ↓
+Existing bounded execution machinery
+    ↓
+Revision Assessment
+    ↓
+Best Valid Version
+```
 
-## Phase B — Strengthened evaluation (implemented)
-- `EvaluationProfile` supports dimension weights, per-dimension minimum scores, required dimensions, minimum evaluator confidence, and minimum overall score.
-- Default adaptive profiles weight task-success and specialized correctness dimensions more heavily than communication polish.
-- Default dimension floor is 0.70, required core task dimensions are goal alignment, task completion, correctness, and instruction following, minimum confidence is 0.60, and minimum overall score is 0.75.
-- Evaluation computes a weighted overall score instead of an unweighted average.
-- Decision policy rejects unknown, partial, failing, low-floor, low-confidence, and below-overall-threshold evaluations; material issues still trigger revision or ask according to revision budget.
-- Revision feedback includes dimension status/score/confidence/reason in addition to explicit issues and revision instructions.
-- Model router preserves `resolve()` as adapter resolution and exposes `selection()` separately for runtime selection descriptors.
-- Tests cover weighted scoring, partial-result rejection, low-confidence rejection, dimension-floor revision, overall-floor revision, revision context propagation, trace revision flow, and role-independent model routing.
+### Diagnosis contract
+- Minimal provider-neutral `Diagnosis` exists in `engine/revise/diagnosis.py`.
+- Advisory recommendations are:
+  - `REVISE`
+  - `VERIFY`
+  - `CHANGE_APPROACH`
+  - `ASK`
+  - `ACCEPT_CANDIDATE`
+- `ACCEPT_CANDIDATE` never authorizes acceptance.
+- Diagnosis validation is structural and fail-closed with bounded confidence.
+- Invalid/low-confidence diagnosis must not mutate evaluation, evidence, decision, version, or best-candidate state.
 
-## Phase C — Deterministic and external verification (implemented baseline + follow-up)
-- Added a provider-neutral deterministic verifier registry.
-- Math-like tasks can select arithmetic consistency verification.
-- Python tasks select AST syntax and compile-only verification without executing generated code.
-- JSON-formatted tasks can select JSON syntax verification.
-- Explicit output schemas select deterministic JSON schema verification.
-- Deterministic evidence is fused with Secondary/custom verifier evidence and participates in evidence precedence.
-- Decision policy explicitly enforces deterministic-failure precedence after evidence fusion.
-- Added bounded external source verification for cited HTTP(S) URLs. It is reachability verification, not claim-truth verification, and is isolated behind a provider-neutral fetcher/verifier boundary.
-- External source verification is selected for research/source/citation/factual tasks, while semantic groundedness/evidence quality remain separate model dimensions.
-- External source failures are handled as non-passing evidence and cannot be overridden by model acceptance.
-- Tests cover Python compiler behavior, non-execution, source reachability, unavailable sources, required citations, source bounds/deduplication, fetch errors, registry execution, profile selection, and verifier budgets.
-- Safe runtime code tests beyond compile-only verification remain deferred until genuine sandbox infrastructure exists.
-- Broader external evidence adapters remain follow-up work; do not fake semantic claim verification.
+### Correction layer
+- `engine/revise/correction.py` provides bounded correction primitives.
+- Baseline diagnosis is conservative/deterministic from current observations; future diagnostic providers may be layered behind the same advisory contract.
+- `REVISE` uses existing revision machinery.
+- `VERIFY` uses existing verification machinery and verification budget; the budget is scoped to each evaluation attempt, so a VERIFY recommendation preserves the configured bounded verification capacity for the next attempt rather than being erased by steps already consumed while evaluating the current attempt.
+- `CHANGE_APPROACH` creates a lightweight new approach identity and a materially different correction instruction; it does not introduce a Strategy framework.
+- `ASK` terminates when existing Decision requires it.
+- Existing Decision remains the only acceptance authority.
+- Correction context preserves the previous evaluation's issue, dimension, and revision feedback instead of replacing it with generic Phase-F text.
 
-## Phase D — Revision quality (implemented)
-- Added `RevisionAssessment` and `assess_revision()` as a provider-neutral comparison layer.
-- Tracks baseline/revised score, score delta/net improvement, resolved issues, introduced issues, improved dimensions, regressed dimensions, severity downgrades/escalations, and status (`improved`, `regressed`, `unchanged`).
-- A revision with unchanged quality cannot be accepted solely because it crosses an absolute threshold.
-- Regressions cannot be accepted; the bounded loop continues if budget remains and otherwise returns `ASK`, with best-version selection preserving the stronger valid candidate.
-- A revision with no score increase can still qualify as improved when it resolves a relevant prior issue or improves a dimension.
-- Issue identity is preserved across severity changes; severity downgrades and escalations are explicitly assessed rather than being misclassified as issue removal/introduction.
-- Adversarial tests cover severity changes, severity escalation despite a higher overall score, dimension tradeoffs where a core dimension regresses, repeated revisions using the immediate previous baseline, and preservation of the stronger prior candidate after a regression.
-- Policy-contract and stabilization tests validate profile structure, evidence requirements, verifier budgets, malformed evaluator outputs, stopping behavior, hard gates, and best-version invariants.
+### Approach tracking
+- Approach identity is lightweight metadata (`approach-0`, `approach-1`, ...), attached to versions/traces.
+- `CHANGE_APPROACH` increments approach identity before the next Primary attempt is generated.
+- Approach identity is not claimed to be perfect semantic classification; it records a bounded requested/material change in correction path.
+- A changed approach is never treated as automatic improvement.
 
-## Phase E — Development trace exposure (implemented baseline)
-- Added `POST /v1/engine/trace` as an additive development interface.
-- The normal `/v1/engine` contract is unchanged.
-- Trace responses serialize only `TraceEvent` timestamp/stage/status/details metadata and preserve the existing payload-safety boundary.
-- Service compatibility is covered for concrete and lightweight/injected engine implementations.
-- Future work can add authenticated/protected development access or richer status views without coupling the core engine to UI concerns.
+### Authority preservation
+- Hard-gate failures remain authoritative.
+- Deterministic/external failures remain authoritative.
+- Required evidence remains authoritative.
+- A new candidate after `CHANGE_APPROACH` must independently pass authoritative checks.
+- A diagnosis recommending `ACCEPT_CANDIDATE` cannot turn a failing hard gate/verifier into `ACCEPT`.
+- The evaluator's `EvaluationResult.decision` is provisional; the engine establishes the authoritative Decision before Diagnosis interprets the attempt.
 
-## Foundation stabilization — current phase
-- Policy objects fail closed when structurally invalid.
-- Hard-gate policy is enforced by the decision layer rather than being decorative configuration.
-- Missing configured deterministic/external verifiers fail closed rather than disappearing from the evaluation path.
-- Verification budgets now have runtime semantics.
-- Evidence requirements now affect acceptance.
-- Evaluator result validation now fails closed.
-- `stop_on_no_improvement` and best-version invariants are implemented.
-- Stabilization regression fixes are now present on the working branch; local execution remains the final confirmation point before merging to `main`.
+### Bounded execution
+- Use existing revision/verification budgets and stopping conditions.
+- Do not introduce a unified Power/Effort abstraction in Phase-F.
+- Do not introduce generic Agent/Strategy frameworks.
+- No unbounded correction loops.
 
-## Roadmap after stabilization
-### Phase C follow-up
-- Add genuine sandboxed code execution/tests only when secure bounded infrastructure is available.
-- Add richer external evidence adapters that can verify structured source metadata or task-specific facts without conflating reachability with claim truth.
+### Revision and best-version invariants
+- Every corrected candidate goes through existing Revision Assessment.
+- `CHANGE_APPROACH` does not bypass unchanged/regressed rejection.
+- A worse approach is rejected and cannot displace a stronger valid version.
+- Best-valid-version selection remains authoritative internally.
+- Terminal ASK exposes no rejected candidate as `final_version`, even when an internal best historical candidate exists.
 
-### Phase D follow-up
-- Continue adversarial/corner-case testing around multi-issue interactions, missing dimensions, score ties, and mixed improvements/regressions.
+### Trace
+Phase-F trace may safely expose metadata for:
+- attempt
+- evaluation
+- evidence
+- diagnosis
+- recommendation
+- approach identity/change
+- correction
+- resource use
+- revision assessment
+- decision
+- final/best selection
 
-### Phase E follow-up
-- Add stronger access control if the development trace endpoint is ever exposed beyond a trusted local/development environment.
-- Consider bounded run/status metadata if the UI needs progress/state without exposing model payloads or internal prompts.
+Never expose prompts, raw responses, credentials, or sensitive payloads.
+
+## Phase-F test contract
+At minimum prove:
+1. bad attempt -> `CHANGE_APPROACH` -> different approach -> improved attempt -> `ACCEPT`.
+2. bad attempt -> `CHANGE_APPROACH` -> worse attempt -> regression -> previous best retained internally and not exposed on terminal ASK.
+3. repeated same-approach failure is bounded by existing budgets/stopping conditions.
+4. missing critical context -> `ASK` -> rejected candidate never exposed.
+5. model pass + `ACCEPT_CANDIDATE` + deterministic fail -> not accepted.
+6. hard-gate fail + `ACCEPT_CANDIDATE` -> not accepted.
+7. deterministic fail + `CHANGE_APPROACH` -> new candidate must independently pass deterministic verification.
+8. verification-limited attempt -> `VERIFY` -> bounded verification path -> re-evaluation/decision.
+9. low-confidence/malformed diagnosis fails closed.
+10. invalid diagnosis cannot mutate authoritative evaluation/evidence/decision/version state.
+11. changed approach without improvement is not successful.
+12. hard gates and deterministic verifiers are rerun/reenforced after approach change where applicable.
+13. best-valid-version survives all rejected/regressed corrections.
+14. evaluator provisional ACCEPT cannot cause Diagnosis to describe a failed candidate as acceptance-ready.
+15. correction context retains actionable evaluator feedback for the next attempt.
+
+## Explicit Phase-F non-goals
+Do not add in Phase-F:
+- unified Power/Effort abstraction
+- generic Agent framework
+- generic Strategy framework
+- search/tree search/candidate search
+- multi-agent orchestration
+- autonomous tool loops
+- memory
+- complex planning graphs
+- provider-specific reasoning controls
+- raw chain-of-thought storage/exposure
+- UI changes
+
+## Current Phase-F status
+- PR #4 / branch `phase-f-diagnosis-foundation` contains the minimal Diagnosis contract and authority-boundary tests.
+- `engine/revise/correction.py` has bounded diagnosis-to-correction primitives and now preserves evaluation feedback in correction context.
+- `engine/engine.py` integrates Diagnosis, correction metadata, lightweight approach tracking, correction context, safe diagnosis/correction trace events, and terminal ASK output protection.
+- The engine now establishes the authoritative Decision before running Diagnosis, preventing provisional evaluator ACCEPT values from masking failed dimensions/evidence.
+- RevisionAssessment issue collections remain stable string identities; Diagnosis consumes those identities directly rather than treating them as Issue objects.
+- VERIFY correction preserves the configured per-attempt verification capacity for the next bounded attempt instead of being downgraded merely because the current attempt already consumed its verification steps.
+- `engine/test_phase_f_verify_correction.py` exercises VERIFY through the provider-neutral verifier machinery and confirms verifier evidence is re-evaluated on the next attempt.
+- `engine/test_phase_f_deterministic_recheck.py` confirms deterministic verification is independently rerun after an approach change.
+- `engine/test_phase_f_best_version.py` covers a multi-attempt regression and confirms the strongest non-regressed candidate remains the best selectable internal version while terminal ASK exposes no candidate.
+- CI engine discovery uses package-aware unittest discovery: `python -m unittest discover -s engine -t . -p 'test*.py' -v`.
+- Full repository test execution must be verified from a local checkout or successful GitHub Actions run; do not claim green without actually running it.
+
+## Agent execution workflow
+- The user maintains a local **agent MD file** used directly to run/coordinate agent work.
+- Treat that agent MD file as an execution workflow input when the user provides or references it; do not assume it is foundation-owned.
+- The launcher/workflow should provide a direct **test-check option** so engine tests can be run without starting the web UI.
+- Preferred engine test command: `python -m unittest discover -s engine -t . -p "test*.py" -v` from the repository root.
+- A test-check path should report pass/fail and return to the launcher menu rather than starting or leaving the engine/web services running.
+- Do not let the test option silently switch away from the branch the user selected; tests should run against the currently selected/synchronized branch.
 
 ## Working procedure
 1. Read this file first.
@@ -148,7 +212,7 @@ User -> Task Contract -> Mode/Profile -> Model Router -> Primary
 3. Check for conflicts with the foundation.
 4. Prefer the smallest additive change.
 5. Test affected behavior before completion.
-6. Update this file for durable changes.
+6. Update this context file for durable engine status/architecture changes.
 7. If an approach cycles or fails repeatedly, stop and reassess instead of retrying blindly.
 
 ## UI handoff for current model changes

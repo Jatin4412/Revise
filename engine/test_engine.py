@@ -45,7 +45,7 @@ class EngineTests(unittest.TestCase):
     def test_missing_evaluation_does_not_pass(self) -> None:
         result = Engine(FunctionPrimary(lambda contract, context: "hello")).run(TaskContract(goal="say hello"))
         self.assertEqual(result.decision.value, "ask")
-        self.assertEqual(result.final_version.response, "hello")
+        self.assertIsNone(result.final_version)
         self.assertEqual(len(result.versions), 1)
 
     def test_revision_context_reaches_primary(self) -> None:

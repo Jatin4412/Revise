@@ -28,7 +28,7 @@ class ScriptedSecondary:
         return result
 
 
-def profile(*, max_revisions: int = 1, stopping_conditions: tuple[str, ...] = ()) -> EvaluationProfile:
+def profile(*, max_revisions: int = 1, stopping_conditions: tuple[str, ...] = (), hard_gates: tuple[str, ...] = ()) -> EvaluationProfile:
     return EvaluationProfile(
         dimensions=("correctness",),
         required_dimensions=("correctness",),
@@ -38,6 +38,7 @@ def profile(*, max_revisions: int = 1, stopping_conditions: tuple[str, ...] = ()
         max_revisions=max_revisions,
         max_verification_steps=0,
         stopping_conditions=stopping_conditions,
+        hard_gates=hard_gates,
     )
 
 
@@ -80,7 +81,7 @@ class PhaseFSelfCorrectionTests(unittest.TestCase):
         ])
         engine = Engine(primary, secondary=secondary)
 
-        outcome = engine.run(TaskContract(goal="solve the task"), profile=profile())
+        outcome = engine.run(TaskContract(goal="solve the task"), profile=profile(hard_gates=("quality",)))
 
         self.assertEqual(outcome.decision, Decision.ASK)
         self.assertIsNone(outcome.final_version)

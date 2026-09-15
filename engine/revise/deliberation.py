@@ -100,49 +100,26 @@ def run_deliberation(
     limits: DeliberationLimits = DeliberationLimits(),
     trace: Trace | None = None,
 ) -> DeliberationResult:
-    """Run one bounded deliberation lifecycle using the configured Primary role.
-
-    Deliberation is deliberately optional for legacy Primary adapters. Adapters that
-    expose ``deliberate(contract, prompt)`` can participate without changing provider
-    selection or introducing a separate agent/model abstraction.
-    """
+    """Run one bounded deliberation lifecycle using the configured Primary role."""
     max_cycles = max(0, limits.max_cycles)
     max_corrections = max(0, limits.max_correction_attempts)
     deliberate = getattr(primary, "deliberate", None)
 
     if max_cycles == 0 or not callable(deliberate):
-        if trace:
-            trace("skipped", "disabled_or_unsupported")
+        _trace(trace, "skipped", "disabled_or_unsupported")
         candidate = primary.generate(contract, context=context)
         return DeliberationResult(candidate=candidate, plan=None, state=None, stop_reason="disabled")
 
     try:
-        plan = _call_structured(
-            deliberate,
-            contract,
-            _plan_prompt(contract, context),
-            _parse_plan,
-        )
+        plan = _call_structured(deliberate, contract, _plan_prompt(contract, context), _parse_plan)
         _trace(trace, "plan", "complete")
     except Exception as exc:
         _trace(trace, "plan", f"failed:{type(exc).__name__}")
         return _fallback(contract, primary, context, trace, "plan_failed")
 
     try:
-        state = _call_structured(
-            deliberate,
-            contract,
-            _reason_prompt(contract, plan, context=context),
-            _parse_reasoning_state,
-        )
-        state = ReasoningState(
-            plan=plan,
-            candidate=state.candidate,
-            assumptions=state.assumptions,
-            open_questions=state.open_questions,
-            cycle=0,
-            approach_id="approach-0",
-        )
+        state = _call_structured(deliberate, contract, _reason_prompt(contract, plan, context=context), _parse_reasoning_state)
+        state = ReasoningState(plan=plan, candidate=state.candidate, assumptions=state.assumptions, open_questions=state.open_questions, cycle=0, approach_id="approach-0")
         _trace(trace, "reason", "complete")
     except Exception as exc:
         _trace(trace, "reason", f"failed:{type(exc).__name__}")
@@ -154,12 +131,7 @@ def run_deliberation(
 
     for cycle in range(1, max_cycles + 1):
         try:
-            reflection = _call_structured(
-                deliberate,
-                contract,
-                _reflection_prompt(contract, current),
-                _parse_reflection,
-            )
+            reflection = _call_structured(deliberate, contract, _reflection_prompt(contract, current, context=context), _parse_reflection)
             reflections.append(reflection)
             _trace(trace, "reflect", "complete", cycle=cycle, concerns=reflection.concern_count, actionable=reflection.actionable)
         except Exception as exc:
@@ -172,12 +144,7 @@ def run_deliberation(
             return DeliberationResult(current.candidate, plan, current, tuple(reflections), tuple(corrections), cycle, len(corrections), "correction_budget_exhausted")
 
         try:
-            correction = _call_structured(
-                deliberate,
-                contract,
-                _correction_prompt(contract, current, reflection),
-                _parse_correction,
-            )
+            correction = _call_structured(deliberate, contract, _correction_prompt(contract, current, reflection, context=context), _parse_correction)
             corrections.append(correction)
             next_approach = f"approach-{len(corrections)}" if correction.change_approach else current.approach_id
             _trace(trace, "correct", "complete", cycle=cycle, approach_id=next_approach, changed=correction.change_approach)
@@ -186,20 +153,8 @@ def run_deliberation(
             return DeliberationResult(current.candidate, plan, current, tuple(reflections), tuple(corrections), cycle, len(corrections), "correction_failed")
 
         try:
-            current = _call_structured(
-                deliberate,
-                contract,
-                _reason_prompt(contract, plan, context=context, prior=current, correction=correction, cycle=cycle),
-                _parse_reasoning_state,
-            )
-            current = ReasoningState(
-                plan=plan,
-                candidate=current.candidate,
-                assumptions=current.assumptions,
-                open_questions=current.open_questions,
-                cycle=cycle,
-                approach_id=next_approach,
-            )
+            current = _call_structured(deliberate, contract, _reason_prompt(contract, plan, context=context, prior=current, correction=correction, cycle=cycle), _parse_reasoning_state)
+            current = ReasoningState(plan=plan, candidate=current.candidate, assumptions=current.assumptions, open_questions=current.open_questions, cycle=cycle, approach_id=next_approach)
             _trace(trace, "re_reason", "complete", cycle=cycle, approach_id=next_approach)
         except Exception as exc:
             _trace(trace, "re_reason", f"failed:{type(exc).__name__}", cycle=cycle)
@@ -209,10 +164,7 @@ def run_deliberation(
 
 
 def _fallback(contract: TaskContract, primary: Primary, context: str | None, trace: Trace | None, reason: str) -> DeliberationResult:
-    try:
-        candidate = primary.generate(contract, context=context)
-    except Exception:
-        raise
+    candidate = primary.generate(contract, context=context)
     _trace(trace, "fallback", reason)
     return DeliberationResult(candidate=candidate, plan=None, state=None, stop_reason=reason)
 
@@ -262,12 +214,7 @@ def _strings(value: Any, field: str, *, max_items: int = 8, max_length: int = 50
 
 
 def _parse_plan(payload: dict[str, Any]) -> Plan:
-    return Plan(
-        approach=_text(payload.get("approach"), "approach", max_length=1000),
-        subproblems=_strings(payload.get("subproblems"), "subproblems"),
-        assumptions=_strings(payload.get("assumptions"), "assumptions"),
-        open_questions=_strings(payload.get("open_questions"), "open_questions"),
-    )
+    return Plan(approach=_text(payload.get("approach"), "approach", max_length=1000), subproblems=_strings(payload.get("subproblems"), "subproblems"), assumptions=_strings(payload.get("assumptions"), "assumptions"), open_questions=_strings(payload.get("open_questions"), "open_questions"))
 
 
 def _parse_reasoning_state(payload: dict[str, Any]) -> ReasoningState:
@@ -313,13 +260,7 @@ def _parse_correction(payload: dict[str, Any]) -> CorrectionPlan:
     change_approach = payload.get("change_approach", False)
     if not isinstance(change_approach, bool):
         raise ValueError("change_approach must be boolean")
-    return CorrectionPlan(
-        problem=_text(payload.get("problem"), "problem", max_length=1000),
-        objective=_text(payload.get("objective"), "objective", max_length=1000),
-        required_change=_text(payload.get("required_change"), "required_change", max_length=1200),
-        approach=_text(payload.get("approach"), "approach", max_length=1000),
-        change_approach=change_approach,
-    )
+    return CorrectionPlan(problem=_text(payload.get("problem"), "problem", max_length=1000), objective=_text(payload.get("objective"), "objective", max_length=1000), required_change=_text(payload.get("required_change"), "required_change", max_length=1200), approach=_text(payload.get("approach"), "approach", max_length=1000), change_approach=change_approach)
 
 
 def _task_sections(contract: TaskContract) -> str:
@@ -364,26 +305,21 @@ def _reason_prompt(contract: TaskContract, plan: Plan, *, context: str | None = 
         if prior.open_questions:
             parts.append("Open questions:\n" + "\n".join(f"- {item}" for item in prior.open_questions))
     if correction:
-        parts.append(
-            "Targeted correction plan:\n"
-            f"Problem: {correction.problem}\n"
-            f"Objective: {correction.objective}\n"
-            f"Required change: {correction.required_change}\n"
-            f"Approach: {correction.approach}\n"
-            f"Change approach: {correction.change_approach}"
-        )
+        parts.append("Targeted correction plan:\n" + f"Problem: {correction.problem}\n" + f"Objective: {correction.objective}\n" + f"Required change: {correction.required_change}\n" + f"Approach: {correction.approach}\n" + f"Change approach: {correction.change_approach}")
     parts.append(f"Deliberation cycle: {cycle}")
     parts.append("Return ONLY JSON:\n{\n  \"candidate\": \"complete candidate response\",\n  \"assumptions\": [\"bounded assumption\"],\n  \"open_questions\": [\"remaining uncertainty\"]\n}")
     return "\n\n".join(parts)
 
 
-def _reflection_prompt(contract: TaskContract, state: ReasoningState) -> str:
-    return f"""You are the adversarial reflection role in Reiterate. Your job is to try to destabilize the current reasoning, not to defend it and not to score or accept the candidate. Search actively for unsupported assumptions, invalid or weak inferences, missing steps, contradictions, ambiguous interpretations, ignored requirements, weak evidence, circular reasoning, wrong framing, unsuitable approach, and other plausible failure modes. A correction is only warranted when a concern is actionable. Do not change the task contract. Do not issue ACCEPT, REVISE, or ASK decisions. Do not expose chain-of-thought.\n\n{_task_sections(contract)}\n\nCurrent approach:\n{state.plan.approach}\n\nCurrent candidate:\n{state.candidate}\n\nKnown assumptions:\n{chr(10).join(f'- {x}' for x in state.assumptions) or '- none'}\n\nReturn ONLY JSON:\n{{\n  \"concerns\": [{{\"kind\": \"hidden_assumption|wrong_approach|missing_inference|ambiguity|contradiction|weak_evidence|circular_reasoning|other\", \"description\": \"specific challenge\", \"severity\": \"critical|major|moderate|minor|informational\"}}],\n  \"challenged_assumptions\": [\"assumption to reconsider\"],\n  \"missing_steps\": [\"required inference that is absent\"],\n  \"contradictions\": [\"specific contradiction\"],\n  \"alternative_interpretations\": [\"plausible alternative reading\"],\n  \"alternative_approaches\": [\"materially different approach if warranted\"],\n  \"confidence\": 0.0,\n  \"actionable\": false\n}}\n\nSet actionable=true only when at least one concern can be addressed by a concrete correction or approach change. Never treat reflection itself as proof of correctness."""
+def _reflection_prompt(contract: TaskContract, state: ReasoningState, *, context: str | None = None) -> str:
+    prior_context = f"\n\nConversation context:\n{context}" if context else ""
+    return f"""You are the adversarial reflection role in Reiterate. Your job is to try to destabilize the current reasoning, not to defend it and not to score or accept the candidate. Search actively for unsupported assumptions, invalid or weak inferences, missing steps, contradictions, ambiguous interpretations, ignored requirements, weak evidence, circular reasoning, wrong framing, unsuitable approach, and other plausible failure modes. A correction is only warranted when a concern is actionable. Do not change the task contract. Do not issue ACCEPT, REVISE, or ASK decisions. Do not expose chain-of-thought.\n\n{_task_sections(contract)}{prior_context}\n\nCurrent approach:\n{state.plan.approach}\n\nCurrent candidate:\n{state.candidate}\n\nKnown assumptions:\n{chr(10).join(f'- {x}' for x in state.assumptions) or '- none'}\n\nReturn ONLY JSON:\n{{\n  \"concerns\": [{{\"kind\": \"hidden_assumption|wrong_approach|missing_inference|ambiguity|contradiction|weak_evidence|circular_reasoning|other\", \"description\": \"specific challenge\", \"severity\": \"critical|major|moderate|minor|informational\"}}],\n  \"challenged_assumptions\": [\"assumption to reconsider\"],\n  \"missing_steps\": [\"required inference that is absent\"],\n  \"contradictions\": [\"specific contradiction\"],\n  \"alternative_interpretations\": [\"plausible alternative reading\"],\n  \"alternative_approaches\": [\"materially different approach if warranted\"],\n  \"confidence\": 0.0,\n  \"actionable\": false\n}}\n\nSet actionable=true only when at least one concern can be addressed by a concrete correction or approach change. Never treat reflection itself as proof of correctness."""
 
 
-def _correction_prompt(contract: TaskContract, state: ReasoningState, reflection: Reflection) -> str:
+def _correction_prompt(contract: TaskContract, state: ReasoningState, reflection: Reflection, *, context: str | None = None) -> str:
+    prior_context = f"\n\nConversation context:\n{context}" if context else ""
     concerns = "\n".join(f"- {item.kind}: {item.description} ({item.severity})" for item in reflection.concerns) or "- none"
-    return f"""You are the correction role in Reiterate. Convert the reflection findings into one targeted correction hypothesis. Do not decide whether the candidate is correct. Do not claim that the correction proves correctness. Do not change the task contract. The next reasoning attempt must actually rebuild or modify the candidate in response to this plan.\n\n{_task_sections(contract)}\n\nCurrent approach:\n{state.plan.approach}\n\nCurrent candidate:\n{state.candidate}\n\nReflection concerns:\n{concerns}\n\nChallenged assumptions:\n{chr(10).join(f'- {x}' for x in reflection.challenged_assumptions) or '- none'}\n\nMissing steps:\n{chr(10).join(f'- {x}' for x in reflection.missing_steps) or '- none'}\n\nAlternative approaches:\n{chr(10).join(f'- {x}' for x in reflection.alternative_approaches) or '- none'}\n\nReturn ONLY JSON:\n{{\n  \"problem\": \"specific problem being corrected\",\n  \"objective\": \"what the next reasoning attempt must establish\",\n  \"required_change\": \"concrete change required in the reasoning or candidate\",\n  \"approach\": \"how the next attempt should proceed\",\n  \"change_approach\": false\n}}"""
+    return f"""You are the correction role in Reiterate. Convert the reflection findings into one targeted correction hypothesis. Do not decide whether the candidate is correct. Do not claim that the correction proves correctness. Do not change the task contract. The next reasoning attempt must actually rebuild or modify the candidate in response to this plan.\n\n{_task_sections(contract)}{prior_context}\n\nCurrent approach:\n{state.plan.approach}\n\nCurrent candidate:\n{state.candidate}\n\nReflection concerns:\n{concerns}\n\nChallenged assumptions:\n{chr(10).join(f'- {x}' for x in reflection.challenged_assumptions) or '- none'}\n\nMissing steps:\n{chr(10).join(f'- {x}' for x in reflection.missing_steps) or '- none'}\n\nAlternative approaches:\n{chr(10).join(f'- {x}' for x in reflection.alternative_approaches) or '- none'}\n\nReturn ONLY JSON:\n{{\n  \"problem\": \"specific problem being corrected\",\n  \"objective\": \"what the next reasoning attempt must establish\",\n  \"required_change\": \"concrete change required in the reasoning or candidate\",\n  \"approach\": \"how the next attempt should proceed\",\n  \"change_approach\": false\n}}"""
 
 
 def _trace(trace: Trace | None, stage: str, status: str, **details: object) -> None:

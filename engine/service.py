@@ -49,21 +49,11 @@ class EngineService:
         return self.handle(self._parse_request(payload)).to_dict()
 
     def handle_trace_payload(self, payload: dict[str, object]) -> dict[str, object]:
-        """Return the normal result plus safe development trace metadata.
-
-        This is intentionally additive to the stable /v1/engine response. Trace events
-        contain execution state only; prompts, generated responses, credentials, and
-        other payload contents remain excluded by ExecutionTrace.
-        """
+        """Return the normal result plus safe development trace metadata."""
         result = self._run(self._parse_request(payload))
         response = self._response(result).to_dict()
         response["trace"] = [
-            {
-                "timestamp": event.timestamp,
-                "stage": event.stage,
-                "status": event.status,
-                "details": dict(event.details),
-            }
+            {"timestamp": event.timestamp, "stage": event.stage, "status": event.status, "details": dict(event.details)}
             for event in result.trace
         ]
         return response
@@ -74,10 +64,6 @@ class EngineService:
             raise ValueError("prompt must not be empty")
         contract = make_contract(prompt, mode=request.mode)
 
-        # The service supports two valid execution modes:
-        # 1. router-backed runtime selection (production HTTP path), and
-        # 2. direct engine injection (unit tests/custom embeddings).
-        # Do not impose concrete Engine attributes on arbitrary engine doubles.
         if self.primary_router is not None:
             primary_selection = request.primary_model or request.model or self.primary_router.default
             primary = self.primary_router.resolve(primary_selection)
@@ -95,11 +81,14 @@ class EngineService:
         _annotate_model(primary, primary_selection)
         _annotate_model(secondary, secondary_selection)
 
-        # A real Engine can be injected without exposing its internal model objects
-        # as an API requirement. Lightweight fakes may consume these arguments
-        # themselves, so only reject an absent Primary when the concrete engine does.
         if primary is None and isinstance(self.engine, Engine):
             raise ValueError("no primary model is configured")
+
+        # Preserve the existing lightweight-engine compatibility path when no new
+        # conversation context is supplied. Only real Engine implementations need
+        # the new initial_context keyword for this phase.
+        if request.conversation is None:
+            return self.engine.run(contract, primary=primary, secondary=secondary)
         return self.engine.run(contract, initial_context=request.conversation, primary=primary, secondary=secondary)
 
     @staticmethod
@@ -133,11 +122,7 @@ def create_default_service() -> EngineService:
     providers = ("gemini", "groq", "openrouter", "openai", "grok")
     primary_router = ModelRouter({provider: lambda model, provider=provider: build_primary(provider, model) for provider in providers}, default=ModelSelection(primary_provider, primary_model))
     secondary_router = SecondaryRouter({provider: lambda model, provider=provider: build_secondary(provider, model) for provider in providers}, default=ModelSelection(secondary_provider, secondary_model))
-    return EngineService(
-        Engine(FunctionPrimary(lambda _contract, _context: ""), trace_sink=console_trace_sink),
-        primary_router=primary_router,
-        secondary_router=secondary_router,
-    )
+    return EngineService(Engine(FunctionPrimary(lambda _contract, _context: ""), trace_sink=console_trace_sink), primary_router=primary_router, secondary_router=secondary_router)
 
 
 def _annotate_model(component: object | None, selection: ModelSelection | None) -> None:

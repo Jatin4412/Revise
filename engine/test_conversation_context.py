@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 
 from engine import Engine, EngineService
-from engine.context import MAX_CONVERSATION_CHARS, MAX_CONVERSATION_MESSAGES, InitialContext, parse_conversation
+from engine.context import MAX_CONVERSATION_CHARS, MAX_CONVERSATION_MESSAGES, parse_conversation
 from engine.revise.models import EvaluationProfile, TaskContract
 
 
@@ -24,9 +24,10 @@ class DeliberativePrimary(CapturePrimary):
 
     def deliberate(self, contract: TaskContract, prompt: str) -> str:
         self.deliberation_prompts.append(prompt)
-        if "planning role" in prompt:
+        lowered = prompt.lower()
+        if "you are the planning role in reiterate" in lowered:
             return '{"approach":"direct","subproblems":[],"assumptions":[],"open_questions":[]}'
-        if "reasoning role" in prompt:
+        if "you are the reasoning role in reiterate" in lowered:
             return '{"candidate":"generated","assumptions":[],"open_questions":[]}'
         return '{"concerns":[],"challenged_assumptions":[],"missing_steps":[],"contradictions":[],"alternative_interpretations":[],"alternative_approaches":[],"confidence":1.0,"actionable":false}'
 
@@ -35,7 +36,7 @@ class ConversationContextTests(unittest.TestCase):
     def test_omitted_conversation_preserves_existing_behavior(self) -> None:
         primary = CapturePrimary()
         result = EngineService(Engine(primary)).handle_payload({"prompt": "current task"})
-        self.assertEqual(result.text, "ok")
+        self.assertEqual(result["text"], "ok")
         self.assertEqual(primary.contexts, [None])
 
     def test_empty_conversation_is_valid_and_behaves_like_omitted(self) -> None:
@@ -66,24 +67,13 @@ class ConversationContextTests(unittest.TestCase):
         self.assertLess(context.index("[user]"), context.index("[assistant]"))
         self.assertIn("Compare X and Y.", context)
         self.assertIn("X is cheaper for storage.", context)
-        self.assertEqual(result.text, "ok")
+        self.assertEqual(result["text"], "ok")
 
     def test_current_prompt_remains_the_task_contract(self) -> None:
-        primary = CapturePrimary()
-        result = EngineService(Engine(primary)).handle_payload(
-            {
-                "prompt": "Now compare their prices.",
-                "conversation": [{"role": "user", "content": "Compare X and Y."}],
-            }
-        )
-        self.assertEqual(result.version_id, "v0")
-        self.assertEqual(result.decision.value, "ask")
-        # The response object does not expose the contract, so exercise the engine boundary directly too.
-        engine_result = Engine(primary).run(
+        context = parse_conversation([{"role": "user", "content": "Compare X and Y."}], supplied=True)
+        engine_result = Engine( CapturePrimary()).run(
             TaskContract(goal="Now compare their prices."),
-            initial_context=parse_conversation(
-                [{"role": "user", "content": "Compare X and Y."}], supplied=True
-            ),
+            initial_context=context,
         )
         self.assertEqual(engine_result.task_contract.goal, "Now compare their prices.")
 

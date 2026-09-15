@@ -37,8 +37,9 @@ Advisory:
 - Diagnosis
 - Correction Recommendation
 - Approach Classification
+- Power/Effort planning
 
-Invariant: advisory diagnosis/recommendation may redirect correction, but can never weaken, bypass, erase, or override an authoritative failure.
+Invariant: advisory diagnosis/recommendation/power planning may redirect execution effort or correction, but can never weaken, bypass, erase, or override an authoritative failure.
 
 ## Durable principles
 1. User intent and explicit mode are authoritative.
@@ -56,6 +57,7 @@ Invariant: advisory diagnosis/recommendation may redirect correction, but can ne
 13. Diagnosis is advisory; it is never a second Decision engine.
 14. `ACCEPT_CANDIDATE` is advisory only; only existing Decision can produce terminal `ACCEPT`.
 15. An authoritative failure must be independently cleared by the authoritative machinery on any new attempt.
+16. Power changes bounded execution effort, not user intent or authority.
 
 ## Current implementation baseline
 - Task contracts/state, Lite/Basic/Pro/Auto modes, adaptive profiles, evidence fusion, Decision, bounded revision, versioning, best-version selection, provider-neutral Primary/Secondary/Verifier protocols, HTTP service boundary, and safe development trace exist.
@@ -66,6 +68,9 @@ Invariant: advisory diagnosis/recommendation may redirect correction, but can ne
 - `ASK` is a first-class terminal outcome when reliable completion is blocked; terminal ASK must never expose a rejected candidate as the final answer.
 - Development trace excludes prompts, responses, credentials, and sensitive payloads; non-loopback trace access requires the configured token.
 - Current runtime adapters support Gemini, Groq, OpenRouter, OpenAI, and Grok; Ollama remains outside the current selector/testing setup.
+- Phase G adds provider-neutral Power planning in `engine/revise/power.py`. Lite resolves to low effort, Basic to medium, Pro to high, and Auto resolves low/medium/high from task complexity signals.
+- Power effort now changes the Primary generation prompt and Secondary evaluation prompt, while retaining the same provider/model selection. This is provider-neutral and does not expose chain-of-thought.
+- Resolved effort also controls bounded revision/verification budgets: low = 0 revisions/1 verification, medium = 1 revision/3 verification, high = 2 revisions/4 verification, with Basic retaining its existing 2-verification budget for backward compatibility.
 
 ## Phase-F implementation contract — LOCKED
 
@@ -126,7 +131,7 @@ Best Valid Version
 
 ### Bounded execution
 - Use existing revision/verification budgets and stopping conditions.
-- Do not introduce a unified Power/Effort abstraction in Phase-F.
+- Do not introduce a unified Power/Effort abstraction in Phase-F; Phase G now provides a separate provider-neutral effort planner without changing the Phase-F authority model.
 - Do not introduce generic Agent/Strategy frameworks.
 - No unbounded correction loops.
 
@@ -188,7 +193,7 @@ Do not add in Phase-F:
 ## Current Phase-F status
 - PR #4 / branch `phase-f-diagnosis-foundation` contains the minimal Diagnosis contract and authority-boundary tests.
 - `engine/revise/correction.py` has bounded diagnosis-to-correction primitives and now preserves evaluation feedback in correction context.
-- `engine/engine.py` integrates Diagnosis, correction metadata, lightweight approach tracking, correction context, safe diagnosis/correction trace events, and terminal ASK output protection.
+- `engine/engine.py` integrates Diagnosis, correction metadata, lightweight approach tracking, correction context, safe diagnosis/correction/approach trace events, and terminal ASK output protection.
 - The engine now establishes the authoritative Decision before running Diagnosis, preventing provisional evaluator ACCEPT values from masking failed dimensions/evidence.
 - RevisionAssessment issue collections remain stable string identities; Diagnosis consumes those identities directly rather than treating them as Issue objects.
 - VERIFY correction preserves the configured per-attempt verification capacity for the next bounded attempt instead of being downgraded merely because the current attempt already consumed its verification steps.
@@ -197,6 +202,15 @@ Do not add in Phase-F:
 - `engine/test_phase_f_best_version.py` covers a multi-attempt regression and confirms the strongest non-regressed candidate remains the best selectable internal version while terminal ASK exposes no candidate.
 - CI engine discovery uses package-aware unittest discovery: `python -m unittest discover -s engine -t . -p 'test*.py' -v`.
 - Full repository test execution must be verified from a local checkout or successful GitHub Actions run; do not claim green without actually running it.
+
+## Phase-G Power contract
+- Power is execution effort, not a second intent system and not a replacement for the authoritative Decision machinery.
+- Explicit Lite/Basic/Pro map to low/medium/high execution effort respectively.
+- Auto is task-sensitive: simple tasks use low effort, moderate complexity uses medium effort, and complex/high-signal tasks use high effort.
+- Power affects provider-neutral Primary generation guidance and Secondary evaluation guidance. It does not select a different provider/model and does not add provider-specific reasoning controls.
+- Power preserves bounded execution: low = 0 revisions/1 verification, medium = 1 revision/3 verification, high = 2 revisions/4 verification. Basic retains 2 verification steps to preserve its existing bounded behavior.
+- Power guidance must not request, store, expose, or depend on raw chain-of-thought.
+- Automated coverage is in `engine/test_power_effort.py` and proves explicit mode effort, Auto task sensitivity, profile budgets, generation prompts, evaluation prompts, and Primary adapter usage.
 
 ## Agent execution workflow
 - The user maintains a local **agent MD file** used directly to run/coordinate agent work.

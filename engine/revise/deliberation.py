@@ -143,7 +143,7 @@ def run_deliberation(
             cycle=0,
             approach_id="approach-0",
         )
-        _trace(trace, "reason", "complete",)
+        _trace(trace, "reason", "complete")
     except Exception as exc:
         _trace(trace, "reason", f"failed:{type(exc).__name__}")
         return _fallback(contract, primary, context, trace, "reason_failed")
@@ -383,7 +383,7 @@ def _reflection_prompt(contract: TaskContract, state: ReasoningState) -> str:
 
 def _correction_prompt(contract: TaskContract, state: ReasoningState, reflection: Reflection) -> str:
     concerns = "\n".join(f"- {item.kind}: {item.description} ({item.severity})" for item in reflection.concerns) or "- none"
-    return f"""You are the correction-planning role in Reiterate. Convert the reflection findings into one targeted correction hypothesis. Do not decide whether the candidate is correct. Do not claim that the correction proves correctness. Do not change the task contract. The next reasoning attempt must actually rebuild or modify the candidate in response to this plan.\n\n{_task_sections(contract)}\n\nCurrent approach:\n{state.plan.approach}\n\nCurrent candidate:\n{state.candidate}\n\nReflection concerns:\n{concerns}\n\nChallenged assumptions:\n{chr(10).join(f'- {x}' for x in reflection.challenged_assumptions) or '- none'}\n\nMissing steps:\n{chr(10).join(f'- {x}' for x in reflection.missing_steps) or '- none'}\n\nAlternative approaches:\n{chr(10).join(f'- {x}' for x in reflection.alternative_approaches) or '- none'}\n\nReturn ONLY JSON:\n{{\n  \"problem\": \"specific problem being corrected\",\n  \"objective\": \"what the next reasoning attempt must establish\",\n  \"required_change\": \"concrete change required in the reasoning or candidate\",\n  \"approach\": \"how the next attempt should proceed\",\n  \"change_approach\": false\n}}"""
+    return f"""You are the correction role in Reiterate. Convert the reflection findings into one targeted correction hypothesis. Do not decide whether the candidate is correct. Do not claim that the correction proves correctness. Do not change the task contract. The next reasoning attempt must actually rebuild or modify the candidate in response to this plan.\n\n{_task_sections(contract)}\n\nCurrent approach:\n{state.plan.approach}\n\nCurrent candidate:\n{state.candidate}\n\nReflection concerns:\n{concerns}\n\nChallenged assumptions:\n{chr(10).join(f'- {x}' for x in reflection.challenged_assumptions) or '- none'}\n\nMissing steps:\n{chr(10).join(f'- {x}' for x in reflection.missing_steps) or '- none'}\n\nAlternative approaches:\n{chr(10).join(f'- {x}' for x in reflection.alternative_approaches) or '- none'}\n\nReturn ONLY JSON:\n{{\n  \"problem\": \"specific problem being corrected\",\n  \"objective\": \"what the next reasoning attempt must establish\",\n  \"required_change\": \"concrete change required in the reasoning or candidate\",\n  \"approach\": \"how the next attempt should proceed\",\n  \"change_approach\": false\n}}"""
 
 
 def _trace(trace: Trace | None, stage: str, status: str, **details: object) -> None:

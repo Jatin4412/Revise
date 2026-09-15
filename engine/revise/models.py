@@ -60,6 +60,8 @@ class EvaluationProfile:
     evaluation_effort: str = "medium"
     max_revisions: int = 1
     max_verification_steps: int = 2
+    max_deliberation_cycles: int = 0
+    max_correction_attempts: int = 0
     stopping_conditions: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
@@ -95,6 +97,10 @@ class EvaluationProfile:
             raise ValueError("max_revisions must be a non-negative integer")
         if not isinstance(self.max_verification_steps, int) or isinstance(self.max_verification_steps, bool) or self.max_verification_steps < 0:
             raise ValueError("max_verification_steps must be a non-negative integer")
+        if not isinstance(self.max_deliberation_cycles, int) or isinstance(self.max_deliberation_cycles, bool) or self.max_deliberation_cycles < 0:
+            raise ValueError("max_deliberation_cycles must be a non-negative integer")
+        if not isinstance(self.max_correction_attempts, int) or isinstance(self.max_correction_attempts, bool) or self.max_correction_attempts < 0:
+            raise ValueError("max_correction_attempts must be a non-negative integer")
         for field_name, values in (("deterministic_checks", self.deterministic_checks), ("external_verification", self.external_verification), ("llm_evaluators", self.llm_evaluators), ("evidence_requirements", self.evidence_requirements), ("hard_gates", self.hard_gates), ("stopping_conditions", self.stopping_conditions)):
             if any(not isinstance(value, str) or not value.strip() for value in values):
                 raise ValueError(f"{field_name} entries must be non-empty strings")

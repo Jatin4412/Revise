@@ -19,6 +19,10 @@ class LLMPrimary:
     def generate(self, contract: TaskContract, *, context: str | None = None) -> str:
         return self._generate_text(_generation_prompt(contract, context))
 
+    def deliberate(self, contract: TaskContract, prompt: str) -> str:
+        """Use the same configured Primary model for a bounded deliberation role."""
+        return self._generate_text(prompt)
+
 
 class LLMSecondary:
     def __init__(self, generate_text: Callable[[str], str]) -> None:
@@ -147,31 +151,7 @@ def _evaluation_prompt(contract: TaskContract, response: str, profile: Evaluatio
     dimensions = "\n".join(f"- {name}" for name in profile.dimensions)
     requirements = "\n".join(f"- {x}" for x in contract.requirements) or "- none"
     constraints = "\n".join(f"- {x}" for x in contract.constraints) or "- none"
-    return f"""You are the Secondary evaluator in Revise. Do not rewrite the candidate. Evaluate it against the task and return ONLY valid JSON.
-
-Task:
-{contract.goal}
-Requirements:
-{requirements}
-Constraints:
-{constraints}
-
-Candidate response:
-{response}
-
-Dimensions to evaluate:
-{dimensions}
-
-Return exactly this JSON structure:
-{{
-  "dimensions": {{
-    "dimension_name": {{"score": 0.0, "confidence": 0.0, "status": "pass|partial|fail", "reason": "..."}}
-  }},
-  "issues": [{{"type": "...", "severity": "critical|major|moderate|minor|informational", "description": "...", "location": null}}],
-  "revision": {{"strategy": "...", "instructions": ["..."]}}
-}}
-
-Cover every requested dimension. Scores and confidence are 0 to 1. Judge against the task and constraints, not personal stylistic preference."""
+    return f"""You are the Secondary evaluator in Revise. Do not rewrite the candidate. Evaluate it against the task and return ONLY valid JSON.\n\nTask:\n{contract.goal}\nRequirements:\n{requirements}\nConstraints:\n{constraints}\n\nCandidate response:\n{response}\n\nDimensions to evaluate:\n{dimensions}\n\nReturn exactly this JSON structure:\n{{\n  \"dimensions\": {{\n    \"dimension_name\": {{\"score\": 0.0, \"confidence\": 0.0, \"status\": \"pass|partial|fail\", \"reason\": \"...\"}}\n  }},\n  \"issues\": [{{\"type\": \"...\", \"severity\": \"critical|major|moderate|minor|informational\", \"description\": \"...\", \"location\": null}}],\n  \"revision\": {{\"strategy\": \"...\", \"instructions\": [\"...\"]}}\n}}\n\nCover every requested dimension. Scores and confidence are 0 to 1. Judge against the task and constraints, not personal stylistic preference."""
 
 
 def _parse_evaluation(raw: str, profile: EvaluationProfile) -> EvaluationResult:

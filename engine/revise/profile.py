@@ -45,14 +45,20 @@ def build_profile(contract: TaskContract) -> EvaluationProfile:
         deterministic_checks.append("json")
     if contract.output_schema is not None:
         deterministic_checks.append("json_schema")
+
     if contract.mode is Mode.LITE:
         effort, revisions, verification = "low", 0, 1
+        deliberation_cycles, correction_attempts = 0, 0
     elif contract.mode is Mode.PRO:
         effort, revisions, verification = "high", 2, 4
+        deliberation_cycles, correction_attempts = 3, 2
     elif contract.mode is Mode.AUTO:
         effort, revisions, verification = "medium", 1, 3
+        deliberation_cycles, correction_attempts = 2, 1
     else:
         effort, revisions, verification = "medium", 1, 2
+        deliberation_cycles, correction_attempts = 2, 1
+
     weights = {name: 1.0 for name in dimensions}
     for name in ("goal_alignment", "task_completion", "correctness", "instruction_following"):
         weights[name] = 1.25
@@ -79,4 +85,6 @@ def build_profile(contract: TaskContract) -> EvaluationProfile:
         evaluation_effort=effort,
         max_revisions=revisions,
         max_verification_steps=verification,
+        max_deliberation_cycles=deliberation_cycles,
+        max_correction_attempts=correction_attempts,
     )

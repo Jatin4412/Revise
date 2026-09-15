@@ -10,6 +10,7 @@ from .revise.models import (
     Decision, DimensionResult, EvaluationProfile, EvaluationResult, Issue,
     RevisionPlan, Severity, TaskContract,
 )
+from .revise.power import select_power_plan
 
 
 class LLMPrimary:
@@ -132,7 +133,8 @@ def _post_json(url: str, payload: dict[str, Any], headers: dict[str, str], timeo
 
 
 def _generation_prompt(contract: TaskContract, context: str | None) -> str:
-    sections = [f"Task:\n{contract.goal}"]
+    power = select_power_plan(contract)
+    sections = [f"Task:\n{contract.goal}", f"Execution effort: {power.effort}\nGeneration guidance: {power.generation_guidance}"]
     if contract.requirements: sections.append("Requirements:\n"+"\n".join(f"- {x}" for x in contract.requirements))
     if contract.constraints: sections.append("Constraints:\n"+"\n".join(f"- {x}" for x in contract.constraints))
     if contract.desired_format: sections.append(f"Format: {contract.desired_format}")
@@ -144,6 +146,7 @@ def _generation_prompt(contract: TaskContract, context: str | None) -> str:
 
 
 def _evaluation_prompt(contract: TaskContract, response: str, profile: EvaluationProfile) -> str:
+    power = select_power_plan(contract)
     dimensions = "\n".join(f"- {name}" for name in profile.dimensions)
     requirements = "\n".join(f"- {x}" for x in contract.requirements) or "- none"
     constraints = "\n".join(f"- {x}" for x in contract.constraints) or "- none"
@@ -158,6 +161,9 @@ Constraints:
 
 Candidate response:
 {response}
+
+Evaluation effort: {profile.evaluation_effort}
+Evaluation guidance: {power.evaluation_guidance}
 
 Dimensions to evaluate:
 {dimensions}

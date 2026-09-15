@@ -5,7 +5,9 @@ from typing import Callable, Iterable
 
 from .execution import ExecutionTrace, TraceEvent
 from .providers import Primary, Secondary, Verifier
+from .revise.correction import Correction, correction_context, choose_correction
 from .revise.decision import decide
+from .revise.diagnosis import CorrectionRecommendation, Diagnosis, infer_diagnosis
 from .revise.evaluator import evaluate, validate_evaluation_result
 from .revise.evidence import fuse_evidence
 from .revise.external import run_external_verifiers
@@ -28,7 +30,7 @@ class EngineResult:
 
 
 class Engine:
-    """Provider-agnostic generation, evaluation, revision, and verification loop."""
+    """Provider-agnostic generation, evaluation, and bounded self-correction loop."""
 
     def __init__(self, primary: Primary, *, secondary: Secondary | None = None, verifier: Verifier | None = None, trace_sink: TraceSink | None = None) -> None:
         self.primary = primary
@@ -43,42 +45,66 @@ class Engine:
         supplied_evidence = tuple(evidence)
         versions: list[Version] = []
         previous: Version | None = None
+        approach_id = "approach-0"
+        pending_correction: Correction | None = None
+        pending_diagnosis: Diagnosis | None = None
         trace = ExecutionTrace()
         self._emit(trace, "request", "received", mode=contract.mode.value)
         self._emit(trace, "contract", "created", requirements=len(contract.requirements), constraints=len(contract.constraints))
         self._emit(trace, "profile", "selected", dimensions=", ".join(profile.dimensions), effort=profile.evaluation_effort, max_revisions=profile.max_revisions, max_verification_steps=profile.max_verification_steps)
 
         for revision_index in range(profile.max_revisions + 1):
-            context = initial_context if previous is None else self._revision_context(previous)
+            if previous is None:
+                context = initial_context
+            elif pending_correction is not None:
+                context = correction_context(
+                    pending_correction.recommendation,
+                    previous.response,
+                    diagnosis=pending_diagnosis,
+                    evaluation=previous.evaluation,
+                )
+            else:
+                context = self._revision_context(previous)
             version_id = f"v{len(versions)}"
-            self._emit(trace, "primary", "start", provider=_provider_name(active_primary), model=_model_name(active_primary), version=version_id, revision=revision_index)
+            self._emit(trace, "primary", "start", provider=_provider_name(active_primary), model=_model_name(active_primary), version=version_id, revision=revision_index, approach=approach_id, correction=pending_correction.recommendation.value if pending_correction else None)
             try:
                 response = active_primary.generate(contract, context=context)
             except Exception as exc:
                 self._emit(trace, "primary", "failed", provider=_provider_name(active_primary), model=_model_name(active_primary), version=version_id, error=type(exc).__name__)
                 raise
             self._emit(trace, "primary", "complete", provider=_provider_name(active_primary), model=_model_name(active_primary), version=version_id, response_length=len(response))
-            version = Version(version_id, response, parent_id=previous.id if previous else None)
-            result, revision_assessment = self._evaluate(contract, response, profile, secondary=active_secondary, evidence=supplied_evidence, revisions_used=revision_index, baseline=previous.evaluation if previous else None, trace=trace)
-            metadata = {"revision_assessment": revision_assessment} if revision_assessment is not None else {}
+            version = Version(version_id, response, parent_id=previous.id if previous else None, metadata={"approach_id": approach_id, "approach_changed": pending_correction.approach_changed if pending_correction else False, "correction": pending_correction.recommendation.value if pending_correction else None})
+            result, revision_assessment, diagnosis, correction = self._evaluate(contract, response, profile, secondary=active_secondary, evidence=supplied_evidence, revisions_used=revision_index, baseline=previous.evaluation if previous else None, approach_id=approach_id, previous_recommendation=pending_correction.recommendation if pending_correction else None, trace=trace)
+            metadata = dict(version.metadata)
+            if revision_assessment is not None:
+                metadata["revision_assessment"] = revision_assessment
+            metadata["diagnosis"] = diagnosis
+            metadata["correction_recommendation"] = correction.recommendation.value
+            metadata["next_approach_id"] = correction.approach_id
             version = Version(version.id, version.response, result, version.parent_id, metadata)
             versions.append(version)
             self._emit(trace, "decision", result.decision.value, version=version.id, score=result.overall_score, confidence=result.confidence)
 
             stop_no_improvement = "stop_on_no_improvement" in profile.stopping_conditions and revision_assessment is not None and revision_assessment.status != "improved"
             if result.decision in (Decision.ACCEPT, Decision.ASK) or stop_no_improvement:
-                final = self._best_version(versions)
                 final_decision = result.decision if not stop_no_improvement else Decision.ASK
+                final = None if final_decision is Decision.ASK else self._best_version(versions)
                 self._emit(trace, "final", "selected", version=final.id if final else None, decision=final_decision.value)
                 return EngineResult(final_decision, final, tuple(versions), contract, profile, trace.snapshot())
+
+            pending_diagnosis = diagnosis
+            pending_correction = correction
+            if correction.approach_changed:
+                approach_id = correction.approach_id
+            self._emit(trace, "correction", correction.recommendation.value, version=version.id, approach=approach_id, approach_changed=correction.approach_changed)
+            self._emit(trace, "revision", "requested", from_version=version.id, next_version=f"v{len(versions)}", correction=correction.recommendation.value, approach=correction.approach_id)
             previous = version
-            self._emit(trace, "revision", "requested", from_version=version.id, next_version=f"v{len(versions)}")
 
         final = self._best_version(versions)
         self._emit(trace, "final", "selected", version=final.id if final else None, decision=Decision.REVISE.value)
         return EngineResult(Decision.REVISE, final, tuple(versions), contract, profile, trace.snapshot())
 
-    def _evaluate(self, contract: TaskContract, response: str, profile: EvaluationProfile, *, secondary: Secondary | None, evidence: Iterable[Evidence], revisions_used: int, baseline: EvaluationResult | None, trace: ExecutionTrace) -> tuple[EvaluationResult, RevisionAssessment | None]:
+    def _evaluate(self, contract: TaskContract, response: str, profile: EvaluationProfile, *, secondary: Secondary | None, evidence: Iterable[Evidence], revisions_used: int, baseline: EvaluationResult | None, approach_id: str, previous_recommendation: CorrectionRecommendation | None, trace: ExecutionTrace) -> tuple[EvaluationResult, RevisionAssessment | None, Diagnosis, Correction]:
         if secondary is not None:
             self._emit(trace, "secondary", "start", provider=_provider_name(secondary), model=_model_name(secondary))
         try:
@@ -96,8 +122,10 @@ class Engine:
             self._emit(trace, "secondary", "complete", provider=_provider_name(secondary), model=_model_name(secondary))
         for name, dimension in base.dimensions.items():
             self._emit(trace, "evaluation", "dimension", name=name, evaluation_status=dimension.status, score=dimension.score, confidence=dimension.confidence)
-        if base.issues: self._emit(trace, "evaluation", "issues", count=len(base.issues))
-        if base.revision.instructions: self._emit(trace, "evaluation", "revision_guidance", count=len(base.revision.instructions))
+        if base.issues:
+            self._emit(trace, "evaluation", "issues", count=len(base.issues))
+        if base.revision.instructions:
+            self._emit(trace, "evaluation", "revision_guidance", count=len(base.revision.instructions))
 
         verification_budget = profile.max_verification_steps
         deterministic_evidence = run_deterministic_verifiers(contract, response, profile, max_steps=verification_budget)
@@ -129,31 +157,49 @@ class Engine:
         revision_assessment = assess_revision(baseline, result)
         if revision_assessment is not None:
             self._emit(trace, "revision", "assessed", revision_status=revision_assessment.status, score_delta=revision_assessment.score_delta, resolved_issues=len(revision_assessment.resolved_issues), introduced_issues=len(revision_assessment.introduced_issues), improved_dimensions=len(revision_assessment.improved_dimensions), regressed_dimensions=len(revision_assessment.regressed_dimensions))
+
+        # The evaluator's Decision is provisional. The existing Decision policy
+        # is the sole authority for the candidate's actual state. Diagnosis is
+        # deliberately run only after that authoritative decision is known.
         result = decide(contract, profile, result, revisions_used=revisions_used, revision_assessment=revision_assessment)
-        return result, revision_assessment
+        diagnosis = infer_diagnosis(contract, result, profile, revision_assessment=revision_assessment, previous_recommendation=previous_recommendation)
+        self._emit(trace, "diagnosis", diagnosis.recommended_correction.value, diagnosis_status=diagnosis.status, confidence=diagnosis.confidence, failure_categories=",".join(diagnosis.failure_categories), affected_dimensions=",".join(diagnosis.affected_dimensions))
+        # Verification budget is scoped to this evaluation attempt. A VERIFY
+        # correction therefore reserves the same bounded verification capacity
+        # for the next attempt rather than treating the current attempt's
+        # already-consumed steps as a permanent exhaustion signal.
+        correction = choose_correction(diagnosis, current_approach_id=approach_id, remaining_revisions=max(0, profile.max_revisions - revisions_used), remaining_verification_steps=profile.max_verification_steps)
+        return result, revision_assessment, diagnosis, correction
 
     def _emit(self, trace: ExecutionTrace, stage: str, event_status: str, **details: object) -> None:
         event = trace.record(stage, event_status, **details)
         if self.trace_sink is not None:
-            try: self.trace_sink(event)
-            except Exception: pass
+            try:
+                self.trace_sink(event)
+            except Exception:
+                pass
 
     @staticmethod
     def _revision_context(previous: Version) -> str:
         evaluation = previous.evaluation
-        if evaluation is None: return previous.response
+        if evaluation is None:
+            return previous.response
         parts = ["Revise the previous response using the evaluation feedback.", previous.response]
-        if evaluation.issues: parts.append("Issues:\n" + "\n".join(f"- {item.description}" for item in evaluation.issues))
+        if evaluation.issues:
+            parts.append("Issues:\n" + "\n".join(f"- {item.description}" for item in evaluation.issues))
         dimension_feedback = tuple(f"- {name}: {dimension.status}; score={dimension.score}; confidence={dimension.confidence}; reason={dimension.reason}" for name, dimension in evaluation.dimensions.items() if dimension.status in {"fail", "partial"} or dimension.score is not None)
-        if dimension_feedback: parts.append("Dimension feedback:\n" + "\n".join(dimension_feedback))
-        if evaluation.revision.instructions: parts.append("Revision instructions:\n" + "\n".join(f"- {item}" for item in evaluation.revision.instructions))
+        if dimension_feedback:
+            parts.append("Dimension feedback:\n" + "\n".join(dimension_feedback))
+        if evaluation.revision.instructions:
+            parts.append("Revision instructions:\n" + "\n".join(f"- {item}" for item in evaluation.revision.instructions))
         return "\n\n".join(parts)
 
     @staticmethod
     def _best_version(versions: list[Version]) -> Version | None:
         def eligible(version: Version) -> bool:
             evaluation = version.evaluation
-            if evaluation is None: return False
+            if evaluation is None:
+                return False
             assessment = version.metadata.get("revision_assessment")
             return not (assessment is not None and getattr(assessment, "status", None) in {"regressed", "unchanged"})
         accepted = [v for v in versions if v.evaluation and v.evaluation.decision is Decision.ACCEPT and eligible(v)]
@@ -163,5 +209,9 @@ class Engine:
         return max(candidates, key=lambda v: (v.evaluation.overall_score or 0.0, v.evaluation.confidence), default=None)
 
 
-def _provider_name(component: object) -> str: return str(getattr(component, "provider", None) or "custom")
-def _model_name(component: object) -> str: return str(getattr(component, "model", None) or "custom")
+def _provider_name(component: object) -> str:
+    return str(getattr(component, "provider", None) or "custom")
+
+
+def _model_name(component: object) -> str:
+    return str(getattr(component, "model", None) or "custom")

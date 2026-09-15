@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 
 from .models import EvaluationProfile, Mode, TaskContract
+from .power import select_power_plan
 
 CORE = ("goal_alignment", "task_completion", "correctness", "relevance", "completeness", "instruction_following")
 COMMUNICATION = ("coherence", "clarity", "usability", "appropriate_depth", "conciseness")
@@ -45,14 +46,16 @@ def build_profile(contract: TaskContract) -> EvaluationProfile:
         deterministic_checks.append("json")
     if contract.output_schema is not None:
         deterministic_checks.append("json_schema")
-    if contract.mode is Mode.LITE:
-        effort, revisions, verification = "low", 0, 1
-    elif contract.mode is Mode.PRO:
-        effort, revisions, verification = "high", 2, 4
-    elif contract.mode is Mode.AUTO:
-        effort, revisions, verification = "medium", 1, 3
+
+    power = select_power_plan(contract)
+    if power.effort == "low":
+        revisions, verification = 0, 1
+    elif power.effort == "high":
+        revisions, verification = 2, 4
     else:
-        effort, revisions, verification = "medium", 1, 2
+        revisions, verification = 1, 3
+    if contract.mode is Mode.BASIC:
+        verification = 2
     weights = {name: 1.0 for name in dimensions}
     for name in ("goal_alignment", "task_completion", "correctness", "instruction_following"):
         weights[name] = 1.25
@@ -76,7 +79,7 @@ def build_profile(contract: TaskContract) -> EvaluationProfile:
         required_dimensions=required,
         minimum_confidence=0.60,
         minimum_overall_score=0.75,
-        evaluation_effort=effort,
+        evaluation_effort=power.effort,
         max_revisions=revisions,
         max_verification_steps=verification,
     )
